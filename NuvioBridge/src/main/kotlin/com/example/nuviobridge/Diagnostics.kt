@@ -10,7 +10,11 @@ import java.util.concurrent.TimeUnit
 /** Ayarlar ekranındaki test düğmelerinin çalıştırdığı kontroller. Anahtarı ekrana yazmaz. */
 object Diagnostics {
     // Yeni bir sürüm yüklediğini bu etiketten anlarsın. Her değişiklikte güncellenir.
-    const val BUILD = "v9"
+    const val BUILD = "v10"
+
+    // Son Sağlayıcı testinin sonucu: script adresi -> link döndürdü mü. "Sadece çalışanları aç" bunu kullanır.
+    private val lastResults = java.util.concurrent.ConcurrentHashMap<String, Boolean>()
+    fun results(): Map<String, Boolean> = HashMap(lastResults)
 
     suspend fun run(): String {
         val sb = StringBuilder()
@@ -59,6 +63,8 @@ object Diagnostics {
 
         val lines = mutableListOf<String>()
         var working = 0
+        lastResults.clear()
+        val futures = java.util.concurrent.ConcurrentHashMap<java.util.concurrent.Future<String>, ScriptRef>()
         val pool = Executors.newFixedThreadPool(minOf(8, scripts.size))
         try {
             val ecs = ExecutorCompletionService<String>(pool)
@@ -69,7 +75,9 @@ object Diagnostics {
                     val log = StringBuilder()
                     fun logNote(): String {
                         val t = log.toString().trim().replace("\n", " | ")
-                        return if (t.isEmpty()) "" else "\n    günlük: " + t.take(300)
+                        // Sonda hatanın sebebi olur; baştaki tekrarlayan adımları değil sonunu göster.
+                        return if (t.isEmpty()) "" else
+                            "\n    günlük: " + (if (t.length > 300) "…" + t.takeLast(300) else t)
                     }
                     try {
                         val script = blocking { app.get(ref.url).text }
@@ -83,10 +91,10 @@ object Diagnostics {
                     } catch (e: Throwable) {
                         label + ": HATA " + (e.message ?: e.javaClass.simpleName).take(120) + logNote()
                     }
-                })
+                }).also { futures[it] = ref }
             }
 
-            val deadline = System.currentTimeMillis() + 150_000L
+            val deadline = System.currentTimeMillis() + 240_000L
             var remaining = scripts.size
             while (remaining > 0) {
                 val left = deadline - System.currentTimeMillis()
@@ -95,10 +103,12 @@ object Diagnostics {
                 remaining--
                 val line = runCatching { done.get() }.getOrDefault("(okunamadı)")
                 val head = line.substringBefore("\n") // ilk satır; günlük notu sonraki satırda
-                if (!head.contains(": HATA") && !head.endsWith(": 0 link") && head != "(okunamadı)") working++
+                val isWorking = !head.contains(": HATA") && !head.endsWith(": 0 link") && head != "(okunamadı)"
+                if (isWorking) working++
+                futures[done]?.let { lastResults[it.url] = isWorking }
                 lines += line
             }
-            if (remaining > 0) lines += remaining.toString() + " sağlayıcı 150 sn içinde yanıt vermedi"
+            if (remaining > 0) lines += remaining.toString() + " sağlayıcı 240 sn içinde yanıt vermedi (bunlar sonuçlara dahil edilmedi)"
         } finally {
             pool.shutdownNow()
         }
