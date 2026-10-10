@@ -88,6 +88,24 @@ object SettingsDialog {
         @JavascriptInterface
         fun version(): String = Diagnostics.BUILD
 
+        @JavascriptInterface
+        fun getSplit(): Boolean = RepoStore.splitEnabled()
+
+        @JavascriptInterface
+        fun setSplit(value: Boolean) = RepoStore.setSplit(value)
+
+        /** Etkin her sağlayıcıyı örnek bir filmle çalıştırıp sonucu ekrana yazar. */
+        @JavascriptInterface
+        fun testProviders() {
+            Thread {
+                val text = runCatching { blocking { Diagnostics.testProviders() } }
+                    .getOrElse { "Test çalışmadı: " + (it.message ?: it.javaClass.simpleName) }
+                view.post {
+                    view.evaluateJavascript("onDiag(" + JSONObject.quote(text) + ")", null)
+                }
+            }.start()
+        }
+
         /** TMDB bağlantısını eklentinin kendi istemcisiyle dener, sonucu ekrana yazar. */
         @JavascriptInterface
         fun diagnose() {
