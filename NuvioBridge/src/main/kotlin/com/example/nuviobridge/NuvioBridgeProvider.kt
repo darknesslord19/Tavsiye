@@ -71,10 +71,11 @@ class NuvioBridgeProvider : MainAPI() {
             val poster = o.optString("poster_path").takeIf { it.isNotBlank() && it != "null" }
                 ?.let { IMG + "w342" + it }
             when (type) {
-                "movie" -> newMovieSearchResponse(title, "movie:" + o.getInt("id"), TvType.Movie) {
+                // Cloudstream http ile başlamayan adresin başına mainUrl ekler; bu yüzden tam adres veriyoruz.
+                "movie" -> newMovieSearchResponse(title, mainUrl + "/movie/" + o.getInt("id"), TvType.Movie) {
                     posterUrl = poster
                 }
-                "tv" -> newTvSeriesSearchResponse(title, "tv:" + o.getInt("id"), TvType.TvSeries) {
+                "tv" -> newTvSeriesSearchResponse(title, mainUrl + "/tv/" + o.getInt("id"), TvType.TvSeries) {
                     posterUrl = poster
                 }
                 else -> null
@@ -84,10 +85,15 @@ class NuvioBridgeProvider : MainAPI() {
 
     // ---------- Detay sayfası ----------
     override suspend fun load(url: String): LoadResponse {
-        val (type, id) = url.split(":")
+        // Adres ".../movie/603" veya ".../tv/1399" biçiminde gelir (eski "movie:603" da çalışır).
+        val match = Regex("(movie|tv)[/:](\\d+)").find(url)
+            ?: throw ErrorLoadingException("Geçersiz adres: " + url)
+        val type = match.groupValues[1]
+        val id = match.groupValues[2]
+        val pageUrl = "$mainUrl/$type/$id"
         return if (type == "movie") {
             val o = JSONObject(app.get("$TMDB/movie/$id?api_key=$TMDB_KEY&language=tr-TR").text)
-            newMovieLoadResponse(o.optString("title"), url, TvType.Movie, "movie|$id|0|0") {
+            newMovieLoadResponse(o.optString("title"), pageUrl, TvType.Movie, "movie|$id|0|0") {
                 plot = o.optString("overview")
                 posterUrl = o.optString("poster_path").takeIf { it.isNotBlank() && it != "null" }
                     ?.let { IMG + "w500" + it }
@@ -113,7 +119,7 @@ class NuvioBridgeProvider : MainAPI() {
                     }
                 }
             }
-            newTvSeriesLoadResponse(o.optString("name"), url, TvType.TvSeries, episodes) {
+            newTvSeriesLoadResponse(o.optString("name"), pageUrl, TvType.TvSeries, episodes) {
                 plot = o.optString("overview")
                 posterUrl = o.optString("poster_path").takeIf { it.isNotBlank() && it != "null" }
                     ?.let { IMG + "w500" + it }
