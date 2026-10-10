@@ -86,8 +86,14 @@ object Net {
     private val cache = LinkedHashMap<String, Entry>()
     private val killer by lazy { CloudflareKiller() }
 
-    private fun headers(): Map<String, String> = mapOf(
-        "User-Agent" to UA,
+    /** Cloudflare'in geçmesi gereken siteler: bu sitelerde baştan aşıcı kullanılır. */
+    private val cfHosts = HashSet<String>()
+
+    /**
+     * cf_clearance çerezi, onu çözen WebView'ın User-Agent'ına bağlıdır; aşıcıyla yapılan isteklerde
+     * User-Agent'ı kendimiz vermeyiz (aşıcı kendisininkini koyar).
+     */
+    private fun headers(withUa: Boolean = true): Map<String, String> = (if (withUa) mapOf("User-Agent" to UA) else emptyMap()) + mapOf(
         "Accept-Language" to "tr-TR,tr;q=0.9,en;q=0.8",
         "Accept" to "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
     )
@@ -101,9 +107,16 @@ object Net {
         var lastError = "bilinmeyen hata"
         for (attempt in 0..1) {
             try {
-                var res = app.get(url, headers = headers(), referer = ref)
-                if (res.code == 403 || res.code == 503) {
-                    res = app.get(url, headers = headers(), referer = ref, interceptor = killer)
+                val host = Scraper.hostOf(url)
+                val useCf = synchronized(cfHosts) { host in cfHosts }
+                var res = if (useCf) {
+                    app.get(url, headers = headers(false), referer = ref, interceptor = killer)
+                } else {
+                    app.get(url, headers = headers(), referer = ref)
+                }
+                if (!useCf && (res.code == 403 || res.code == 503)) {
+                    res = app.get(url, headers = headers(false), referer = ref, interceptor = killer)
+                    if (res.code in 200..399) synchronized(cfHosts) { cfHosts.add(host) }
                 }
                 if (res.code in 200..399) {
                     val text = res.text
