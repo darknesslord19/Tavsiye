@@ -145,7 +145,7 @@ object SettingsHtml {
   document.getElementById('provBtn').onclick = function () {
     var d = document.getElementById('diag');
     d.style.display = 'block';
-    d.textContent = 'Sağlayıcılar deneniyor, bir dakikaya kadar sürebilir...';
+    d.textContent = 'Sağlayıcılar deneniyor, çok sayıda varsa birkaç dakika sürebilir...';
     Android.testProviders();
   };
 
