@@ -88,6 +88,16 @@ object SettingsDialog {
         @JavascriptInterface
         fun version(): String = Diagnostics.BUILD
 
+        /** Son Sağlayıcı testine göre: link verenleri açık tut, vermeyenleri kapat. */
+        @JavascriptInterface
+        fun keepWorking(): String {
+            val results = Diagnostics.results()
+            if (results.isEmpty()) return "Önce Sağlayıcı testini çalıştırıp bitmesini bekle."
+            val disabled = RepoStore.applyTestResults(results)
+            return results.values.count { it }.toString() + " sağlayıcı açık kaldı, " + disabled +
+                " tanesi kapatıldı. Kaynak listesinin güncellenmesi için Cloudstream'i kapatıp aç."
+        }
+
         @JavascriptInterface
         fun getSplit(): Boolean = RepoStore.splitEnabled()
 
