@@ -21,7 +21,7 @@ object WebJsRunner {
     private val main = Handler(Looper.getMainLooper())
 
     // Aynı anda en fazla kaç WebView açık olsun (bellek için sınırlı tutulur).
-    private val gate = Semaphore(4)
+    private val gate = Semaphore(6)
     private const val TIMEOUT_SECONDS = 40L
 
     private const val PRELUDE = """
