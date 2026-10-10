@@ -70,6 +70,13 @@ object RepoStore {
         prefs()?.edit()?.putString(KEY, arr.toString())?.apply()
     }
 
+    /** Her sağlayıcı Cloudstream'de ayrı kaynak olarak görünsün mü? (Değişiklik uygulama yeniden başlayınca geçerli olur.) */
+    fun splitEnabled(): Boolean = prefs()?.getBoolean("split", true) ?: true
+
+    fun setSplit(value: Boolean) {
+        prefs()?.edit()?.putBoolean("split", value)?.apply()
+    }
+
     fun remove(url: String) = save(list().filterNot { it.url == url })
 
     fun setEnabled(url: String, enabled: Boolean) =
