@@ -312,6 +312,12 @@ class SiteProvider(private val site: SiteInfo) : MainAPI() {
         val hdr = HashMap<String, String>()
         hdr["User-Agent"] = Net.UA
         hdr.putAll(extra)
+        // Oynatıcıya vermeden önce kısa yoklama: 4xx/5xx dönen ya da HTML dönen adres "Sunucu hatası" verir, atla.
+        val bad = probe(clean, referer, hdr, type)
+        if (bad != null) {
+            tr("  atlandı (" + bad + "): " + clean.take(80))
+            return false
+        }
         callback(
             newExtractorLink(name, label, clean, type) {
                 this.referer = extra["Referer"] ?: referer
@@ -320,6 +326,19 @@ class SiteProvider(private val site: SiteInfo) : MainAPI() {
             }
         )
         return true
+    }
+
+    /** Adres oynatılamaz görünüyorsa nedenini, aksi halde null döner. Ağ hatasında şüpheden yararlanır (null). */
+    private suspend fun probe(url: String, referer: String, hdr: Map<String, String>, type: ExtractorLinkType): String? {
+        val h = HashMap(hdr)
+        if (type == ExtractorLinkType.VIDEO) h["Range"] = "bytes=0-1"
+        val res = timed(8_000L) {
+            app.get(url, headers = h, referer = h["Referer"] ?: referer, timeout = 7L)
+        } ?: return null
+        if (res.code >= 400) return "HTTP " + res.code
+        val ct = (res.headers["Content-Type"] ?: res.headers["content-type"] ?: "").lowercase()
+        if (type == ExtractorLinkType.VIDEO && (ct.startsWith("text/html") || ct.contains("json"))) return "video değil: " + ct.substringBefore(';')
+        return null
     }
 
     private fun labelFor(u: String): String = name + " • " + Scraper.hostOf(u)
