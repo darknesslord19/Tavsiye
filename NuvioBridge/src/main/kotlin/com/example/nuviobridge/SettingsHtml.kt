@@ -39,7 +39,14 @@ object SettingsHtml {
     <button id="add">Ekle</button>
   </div>
   <div id="msg"></div>
-  <div class="row"><button class="ghost" id="diagBtn">Bağlantı testi</button></div>
+  <div class="row">
+    <button class="ghost" id="diagBtn">Bağlantı testi</button>
+    <button class="ghost" id="provBtn">Sağlayıcı testi</button>
+  </div>
+  <label class="prov" style="margin-bottom:10px">
+    <input type="checkbox" id="split">
+    <span>Her sağlayıcıyı ayrı kaynak olarak göster (değişince Cloudstream'i kapatıp aç)</span>
+  </label>
   <pre id="diag" style="display:none;white-space:pre-wrap;font-size:12px;color:#bbb;background:#1e1e1e;border-radius:8px;padding:10px;margin:0 0 12px"></pre>
   <div id="list"></div>
 
@@ -130,6 +137,17 @@ object SettingsHtml {
   function onDiag(text) {
     document.getElementById('diag').textContent = text;
   }
+
+  var split = document.getElementById('split');
+  split.checked = Android.getSplit();
+  split.onchange = function () { Android.setSplit(split.checked); };
+
+  document.getElementById('provBtn').onclick = function () {
+    var d = document.getElementById('diag');
+    d.style.display = 'block';
+    d.textContent = 'Sağlayıcılar deneniyor, bir dakikaya kadar sürebilir...';
+    Android.testProviders();
+  };
 
   Android.refresh(); // eski sürümde eklenmiş repoların adını ve sağlayıcı listesini tamamlar
 </script>
