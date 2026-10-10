@@ -19,6 +19,9 @@ Derleme tamamlanınca workflow sayfasındaki **Artifacts** bölümünden `NuvioB
 ## Notlar
 
 - TMDB API anahtarı `NuvioBridgeProvider.kt` içindeki `TMDB_KEY` alanındadır.
+- Ayarlar ekranında repo adı görünür ve her sağlayıcı ayrı ayrı açılıp kapatılabilir.
+- Sağlayıcılar paralel çalışır (en fazla 8 aynı anda, toplam bekleme 45 saniye).
+- Ana sayfada TMDB trend ve popüler listeleri gösterilir.
 - Manifest şeması (`scrapers`/`providers`, `filename`) ve provider fonksiyon imzası varsayımdır; gerçek bir repoyla test edilmemiştir.
 - Gerçek provider'lar `cheerio`, `URL` gibi ortam parçaları isteyebilir; `JsRunner.kt` içindeki `PRELUDE` bölümüne eklenmeleri gerekebilir.
 
