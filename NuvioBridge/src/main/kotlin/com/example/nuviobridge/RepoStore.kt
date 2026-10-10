@@ -27,6 +27,8 @@ object RepoStore {
         appContext = context.applicationContext
     }
 
+    fun context(): Context? = appContext
+
     private fun prefs() = appContext?.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
 
     private fun fallbackName(url: String) =
