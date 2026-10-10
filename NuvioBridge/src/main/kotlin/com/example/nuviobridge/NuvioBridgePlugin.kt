@@ -1,7 +1,6 @@
 package com.example.nuviobridge
 
 import android.content.Context
-import androidx.appcompat.app.AppCompatActivity
 import com.lagradost.cloudstream3.plugins.CloudstreamPlugin
 import com.lagradost.cloudstream3.plugins.Plugin
 
@@ -12,9 +11,6 @@ class NuvioBridgePlugin : Plugin() {
         registerMainAPI(NuvioBridgeProvider())
 
         // Eklentinin yanındaki dişli simgesine basınca açılır.
-        openSettings = { ctx ->
-            val activity = ctx as AppCompatActivity
-            SettingsFragment().show(activity.supportFragmentManager, "NuvioBridgeSettings")
-        }
+        openSettings = { ctx -> SettingsDialog.show(ctx) }
     }
 }
