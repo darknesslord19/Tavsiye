@@ -33,6 +33,8 @@ object SiteStore {
     private const val K_CACHE = "remote_cache"
     private const val K_DISABLED = "disabled"
     private const val K_STAMP = "remote_stamp"
+    private const val K_CATS = "cats"
+    private const val K_STATUS = "status"
     private const val REFRESH_EVERY_MS = 6L * 3600 * 1000
 
     private var appContext: Context? = null
@@ -158,6 +160,58 @@ object SiteStore {
     fun removeSource(url: String) {
         val list = sources().filterNot { normKey(it) == normKey(url) }
         prefs()?.edit()?.putString(K_SOURCES, JSONArray(list).toString())?.apply()
+    }
+
+    // ---------- Kategori önbelleği (kaynak seçicide kategori satırları olarak görünür) ----------
+    fun cats(siteUrl: String): List<SiteCat> {
+        return try {
+            val o = JSONObject(prefs()?.getString(K_CATS, "{}") ?: "{}")
+            val a = o.optJSONArray(normKey(siteUrl)) ?: return emptyList()
+            (0 until a.length()).mapNotNull { i ->
+                val c = a.optJSONObject(i) ?: return@mapNotNull null
+                val n = c.optString("n")
+                val u = c.optString("u")
+                if (n.isBlank() || u.isBlank()) null else SiteCat(n, u)
+            }
+        } catch (e: Exception) {
+            emptyList()
+        }
+    }
+
+    fun saveCats(siteUrl: String, cats: List<SiteCat>) {
+        try {
+            val o = JSONObject(prefs()?.getString(K_CATS, "{}") ?: "{}")
+            val a = JSONArray()
+            cats.forEach { a.put(JSONObject().put("n", it.name).put("u", it.url)) }
+            o.put(normKey(siteUrl), a)
+            prefs()?.edit()?.putString(K_CATS, o.toString())?.apply()
+        } catch (ignored: Exception) {
+        }
+    }
+
+    // ---------- Site durumu (ayar ekranındaki test sonucu) ----------
+    class Status(val ok: Boolean, val text: String, val time: Long)
+
+    fun status(siteUrl: String): Status? {
+        return try {
+            val o = JSONObject(prefs()?.getString(K_STATUS, "{}") ?: "{}").optJSONObject(normKey(siteUrl))
+                ?: return null
+            Status(o.optBoolean("ok", false), o.optString("t"), o.optInt("ts", 0).toLong())
+        } catch (e: Exception) {
+            null
+        }
+    }
+
+    fun setStatus(siteUrl: String, ok: Boolean, text: String) {
+        try {
+            val all = JSONObject(prefs()?.getString(K_STATUS, "{}") ?: "{}")
+            all.put(
+                normKey(siteUrl),
+                JSONObject().put("ok", ok).put("t", text.take(200)).put("ts", (System.currentTimeMillis() / 1000).toInt())
+            )
+            prefs()?.edit()?.putString(K_STATUS, all.toString())?.apply()
+        } catch (ignored: Exception) {
+        }
     }
 
     // ---------- Liste çözümleme ----------
