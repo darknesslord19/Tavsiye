@@ -41,8 +41,20 @@ object SettingsDialog {
         @JavascriptInterface
         fun getRepos(): String {
             val arr = JSONArray()
-            RepoStore.list().forEach {
-                arr.put(JSONObject().put("url", it.url).put("enabled", it.enabled))
+            RepoStore.list().forEach { r ->
+                val provs = JSONArray()
+                r.providers.forEach {
+                    provs.put(
+                        JSONObject().put("name", it.name).put("file", it.file).put("enabled", it.enabled)
+                    )
+                }
+                arr.put(
+                    JSONObject()
+                        .put("url", r.url)
+                        .put("enabled", r.enabled)
+                        .put("name", r.name)
+                        .put("providers", provs)
+                )
             }
             return arr.toString()
         }
@@ -64,10 +76,23 @@ object SettingsDialog {
             }.start()
         }
 
+        /** Adı/provider listesi kayıtlı olmayan eski repoları tamamlar, bitince listeyi yeniler. */
+        @JavascriptInterface
+        fun refresh() {
+            Thread {
+                runCatching { blocking { RepoStore.refreshMissing() } }
+                view.post { view.evaluateJavascript("render()", null) }
+            }.start()
+        }
+
         @JavascriptInterface
         fun removeRepo(url: String) = RepoStore.remove(url)
 
         @JavascriptInterface
         fun setEnabled(url: String, enabled: Boolean) = RepoStore.setEnabled(url, enabled)
+
+        @JavascriptInterface
+        fun setProviderEnabled(url: String, file: String, enabled: Boolean) =
+            RepoStore.setProviderEnabled(url, file, enabled)
     }
 }
