@@ -47,14 +47,22 @@ fun <T, R> parallel(items: List<T>, max: Int = 6, f: suspend (T) -> R?): List<R?
  * [ms] içinde bitmeyen işi bırakır ve null döner (takılan WebView / çıkarıcılar tüm akışı kilitlemesin).
  * Süre dolunca iş arka planda kendi zaman aşımına kadar sürebilir.
  */
-fun <T> timed(ms: Long, f: suspend () -> T?): T? {
+fun <T> timed(ms: Long, onError: ((String) -> Unit)? = null, f: suspend () -> T?): T? {
     val pool = Executors.newSingleThreadExecutor()
     return try {
-        val fut = pool.submit(Callable<T?> { runCatching { blocking { f() } }.getOrNull() })
+        val fut = pool.submit(Callable<T?> {
+            try {
+                blocking { f() }
+            } catch (e: Throwable) {
+                onError?.invoke(e.javaClass.simpleName + ": " + (e.message ?: "-").take(80))
+                null
+            }
+        })
         try {
             fut.get(ms, TimeUnit.MILLISECONDS)
         } catch (e: Exception) {
             fut.cancel(true)
+            onError?.invoke("zaman aşımı (" + ms / 1000 + " sn)")
             null
         }
     } finally {
