@@ -12,7 +12,7 @@ object SettingsHtml {
   body { font-family: sans-serif; background:#121212; color:#eee; margin:0; padding:16px; }
   h2 { margin:0 0 4px; font-size:20px; }
   p.sub { margin:0 0 16px; color:#999; font-size:13px; }
-  .row { display:flex; gap:8px; margin-bottom:8px; }
+  .row { display:flex; gap:8px; margin-bottom:8px; flex-wrap:wrap; }
   input[type=url] { flex:1; padding:12px; border-radius:8px; border:1px solid #333; background:#1e1e1e; color:#eee; font-size:14px; }
   button { padding:12px 16px; border:0; border-radius:8px; background:#6c5ce7; color:#fff; font-size:14px; }
   button.del { background:#c0392b; padding:8px 12px; }
@@ -42,6 +42,7 @@ object SettingsHtml {
   <div class="row">
     <button class="ghost" id="diagBtn">Bağlantı testi</button>
     <button class="ghost" id="provBtn">Sağlayıcı testi</button>
+    <button class="ghost" id="keepBtn">Sadece çalışanları aç</button>
   </div>
   <label class="prov" style="margin-bottom:10px">
     <input type="checkbox" id="split">
@@ -147,6 +148,13 @@ object SettingsHtml {
     d.style.display = 'block';
     d.textContent = 'Sağlayıcılar deneniyor, çok sayıda varsa birkaç dakika sürebilir...';
     Android.testProviders();
+  };
+
+  document.getElementById('keepBtn').onclick = function () {
+    var d = document.getElementById('diag');
+    d.style.display = 'block';
+    d.textContent = Android.keepWorking();
+    render();
   };
 
   Android.refresh(); // eski sürümde eklenmiş repoların adını ve sağlayıcı listesini tamamlar
