@@ -30,7 +30,14 @@ class SiteProvider(private val site: SiteInfo) : MainAPI() {
         const val CAT_MAX = 15              // kaynak seçicide gösterilen en çok kategori satırı
         private const val MAX_IFRAMES = 6   // bir sayfada denenecek iframe sayısı
         private const val EXTRACTOR_MS = 20_000L
-        private const val WEBVIEW_MS = 25_000L
+        private const val WEBVIEW_MS = 35_000L
+        private const val WEBVIEW_TRIES = 2     // sayfa başına tarayıcıda dinlenecek en çok iframe
+        // Tarayıcıda dinlerken oynat düğmesine otomatik tıklar (birçok oynatıcı tıklanmadan akış başlatmaz)
+        private const val AUTOCLICK = "(function(){var s=['.jw-icon-display','.jw-display-icon-container','.vjs-big-play-button'," +
+            "'.plyr__control--overlaid','.fp-play','.play-button','.play','#play','[class*=big-play]','[aria-label*=lay]'];" +
+            "function go(){try{var v=document.querySelector('video');if(v){v.muted=true;var p=v.play();if(p&&p.catch)p.catch(function(){});}}catch(x){}" +
+            "for(var i=0;i<s.length;i++){try{var e=document.querySelector(s[i]);if(e)e.click();}catch(x){}}}" +
+            "go();setInterval(go,1500);})();"
         private val SEARCH_PATHS = listOf(
             "?s={q}", "arama/{q}", "search?q={q}", "ara?q={q}", "arama?q={q}", "?q={q}",
         )
@@ -48,6 +55,13 @@ class SiteProvider(private val site: SiteInfo) : MainAPI() {
             cats.forEach { pairs.add(it.url to it.name) }
             return mainPageOf(*pairs.toTypedArray())
         }
+
+    // Test sırasında doldurulur: oynatma adımlarının neden başarılı/başarısız olduğunu raporlar
+    @Volatile private var trace: java.util.concurrent.CopyOnWriteArrayList<String>? = null
+
+    private fun tr(msg: String) {
+        trace?.add(msg)
+    }
 
     // M3U listesiyse içeriği burada tutulur (arama için)
     @Volatile private var m3uGroups: Map<String, List<SiteMovie>>? = null
@@ -314,16 +328,19 @@ class SiteProvider(private val site: SiteInfo) : MainAPI() {
      * Bir iframe adresinden link çıkarır:
      *  1) CloudStream'in hazır çıkarıcıları (bilinen oynatıcı siteleri)
      *  2) iframe sayfasını oku: packed JS / base64 / JSON içinden video ve iç içe iframe
-     *  3) gerçek tarayıcıda aç, ağda geçen .m3u8/.mp4 adresini yakala
+     *  3) gerçek tarayıcıda aç (oynat düğmesine otomatik tıklanır), ağda geçen .m3u8/.mp4 adresini yakala
      */
     private suspend fun fromIframe(
         iframe: String,
         referer: String,
         depth: Int,
+        allowWebView: Boolean,
         seen: MutableSet<String>,
         subtitleCallback: (SubtitleFile) -> Unit,
         callback: (ExtractorLink) -> Unit,
     ): Boolean {
+        val pad = "  ".repeat(depth + 1)
+        tr(pad + "iframe: " + iframe.take(90))
         var found = false
         val wrap: (ExtractorLink) -> Unit = {
             found = true
@@ -331,38 +348,51 @@ class SiteProvider(private val site: SiteInfo) : MainAPI() {
         }
 
         // 1) hazır çıkarıcılar (takılırsa bırakılır)
-        timed(EXTRACTOR_MS) {
+        timed(EXTRACTOR_MS, { tr(pad + "çıkarıcı hata: $it") }) {
             loadExtractor(iframe, referer, subtitleCallback, wrap)
         }
+        tr(pad + "CloudStream çıkarıcıları: " + if (found) "link verdi" else "link yok")
         if (found) return true
 
         // 2) iframe sayfasını oku
-        val pg = Net.pageOrNull(iframe, referer)
+        var pg: Page? = null
+        try {
+            pg = Net.page(iframe, referer)
+        } catch (e: Exception) {
+            tr(pad + "sayfa açılamadı: " + (e.message ?: e.javaClass.simpleName).take(80))
+        }
         if (pg != null) {
             val ref = mapOf("Referer" to iframe, "Origin" to Scraper.origin(iframe).trimEnd('/'))
-            for (v in Scraper.findVideos(pg.html, pg.url)) {
+            val vids = Scraper.findVideos(pg.html, pg.url)
+            val inner = if (depth < 2) Scraper.findPlayer(pg.html, pg.url, null).iframes.filter { it != iframe } else emptyList()
+            tr(pad + "sayfa: " + pg.html.length / 1024 + " KB, video " + vids.size + ", iç iframe " + inner.size)
+            for (v in vids) {
                 if (emitVideo(v, iframe, labelFor(iframe), ref, seen, wrap)) found = true
             }
             if (found) return true
-            if (depth < 2) {
-                for (inner in Scraper.findPlayer(pg.html, pg.url, null).iframes.take(MAX_IFRAMES)) {
-                    if (inner == iframe) continue
-                    if (fromIframe(inner, iframe, depth + 1, seen, subtitleCallback, callback)) return true
-                }
+            for (i in inner.take(MAX_IFRAMES)) {
+                if (fromIframe(i, iframe, depth + 1, allowWebView, seen, subtitleCallback, callback)) return true
             }
         }
 
         // 3) gerçek tarayıcıda dinle
-        val sniffed = timed(WEBVIEW_MS) {
+        if (!allowWebView) {
+            tr(pad + "tarayıcı dinleme atlandı (sınır)")
+            return found
+        }
+        val sniffed = timed(WEBVIEW_MS, { tr(pad + "tarayıcı hata: $it") }) {
             app.get(
                 iframe,
                 referer = referer,
-                interceptor = WebViewResolver(Regex("""\.(m3u8|mp4|mpd)"""))
+                interceptor = WebViewResolver(Regex("""\.(m3u8|mp4|mpd)"""), script = AUTOCLICK)
             ).url
         }
         if (sniffed != null && Regex("""\.(m3u8|mp4|mpd)""").containsMatchIn(sniffed) && !sniffed.contains("/ads/")) {
+            tr(pad + "tarayıcı yakaladı: " + sniffed.take(90))
             val ref = mapOf("Referer" to iframe, "Origin" to Scraper.origin(iframe).trimEnd('/'))
             if (emitVideo(sniffed, iframe, labelFor(iframe), ref, seen, wrap)) found = true
+        } else {
+            tr(pad + "tarayıcı: video isteği yakalanamadı")
         }
         return found
     }
@@ -397,23 +427,30 @@ class SiteProvider(private val site: SiteInfo) : MainAPI() {
             Net.pageOrNull(alt, data)?.let { pages.add(it) }
         }
 
+        var tries = 0
         for (pg in pages) {
             val src = Scraper.findPlayer(pg.html, pg.url, site.rules)
+            tr("sayfa: " + pg.url.take(80) + " → video " + src.videos.size + ", iframe " + src.iframes.size)
             val ref = mapOf("Referer" to pg.url)
             for (v in src.videos) emitVideo(v, pg.url, name, ref, seen, wrap)
             if (found) return true
             for (f in src.iframes.take(MAX_IFRAMES)) {
-                fromIframe(f, pg.url, 0, seen, subtitleCallback, wrap)
+                val allow = tries < WEBVIEW_TRIES
+                tries++
+                fromIframe(f, pg.url, 0, allow, seen, subtitleCallback, wrap)
+                if (found) return true
             }
-            if (found) return true
         }
 
         // Son çare: sayfanın kendisini tarayıcıda aç ve ağdaki videoyu yakala
-        val sniffed = timed(WEBVIEW_MS) {
-            app.get(first.url, interceptor = WebViewResolver(Regex("""\.(m3u8|mp4|mpd)"""))).url
+        val sniffed = timed(WEBVIEW_MS, { tr("sayfa tarayıcı hata: $it") }) {
+            app.get(first.url, interceptor = WebViewResolver(Regex("""\.(m3u8|mp4|mpd)"""), script = AUTOCLICK)).url
         }
         if (sniffed != null && Regex("""\.(m3u8|mp4|mpd)""").containsMatchIn(sniffed) && !sniffed.contains("/ads/")) {
+            tr("sayfa tarayıcı yakaladı: " + sniffed.take(90))
             emitVideo(sniffed, first.url, name, mapOf("Referer" to first.url), seen, wrap)
+        } else {
+            tr("sayfa tarayıcı: video isteği yakalanamadı")
         }
         return found
     }
@@ -475,10 +512,18 @@ class SiteProvider(private val site: SiteInfo) : MainAPI() {
             if (ps.iframes.isNotEmpty()) sb.append(" (").append(ps.iframes.take(3).joinToString { Scraper.hostOf(it) }).append(")")
             sb.append('\n')
 
-            val links = ArrayList<String>()
-            timed(60_000L) {
-                loadLinks(data, false, {}, { links.add(it.name + " [" + it.type + "]") })
+            val links = java.util.concurrent.CopyOnWriteArrayList<String>()
+            val log = java.util.concurrent.CopyOnWriteArrayList<String>()
+            trace = log
+            try {
+                timed(120_000L, { log.add("loadLinks hata: $it") }) {
+                    loadLinks(data, false, {}, { links.add(it.name + " [" + it.type + "]") })
+                }
+            } finally {
+                trace = null
             }
+            sb.append("— oynatma adımları —\n")
+            log.forEach { sb.append(it).append('\n') }
             if (links.isEmpty()) {
                 sb.append("✗ Oynatma bağlantısı çıkarılamadı\n")
                 ok = false
