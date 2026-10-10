@@ -96,11 +96,15 @@ object SettingsDialog {
                     var t: Throwable? = e
                     var n = 0
                     while (t != null && n < 4) {
-                        chain.append(t.javaClass.simpleName).append(": ").append(t.message ?: "-").append('\n')
+                        chain.append(t.javaClass.simpleName).append(": ").append(t.message ?: "-")
+                        t.stackTrace.firstOrNull { it.className.startsWith("com.example") }?.let {
+                            chain.append("  @").append(it.className.substringAfterLast('.')).append('.').append(it.methodName).append(':').append(it.lineNumber)
+                        }
+                        chain.append('\n')
                         t = t.cause
                         n++
                     }
-                    text = "✗ Test çalışmadı:\n" + chain
+                    text = "✗ Test çalışmadı: " + chain.toString().lines().first() + "\n" + chain
                 }
                 val first = text.lines().firstOrNull { it.startsWith("✗") || it.startsWith("✓") } ?: text.lines().firstOrNull().orEmpty()
                 SiteStore.setStatus(url, ok, if (ok) "çalışıyor" else first.removePrefix("✗ "))
