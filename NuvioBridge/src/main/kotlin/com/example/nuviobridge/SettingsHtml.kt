@@ -32,13 +32,15 @@ object SettingsHtml {
 </style>
 </head>
 <body>
-  <h2>Nuvio Bridge</h2>
+  <h2 id="ttl">Nuvio Bridge</h2>
   <p class="sub">Nuvio repolarının manifest.json adresini ekle. Provider'lar Cloudstream içinde çalışır.</p>
   <div class="row">
     <input id="url" type="url" placeholder="https://.../manifest.json">
     <button id="add">Ekle</button>
   </div>
   <div id="msg"></div>
+  <div class="row"><button class="ghost" id="diagBtn">Bağlantı testi</button></div>
+  <pre id="diag" style="display:none;white-space:pre-wrap;font-size:12px;color:#bbb;background:#1e1e1e;border-radius:8px;padding:10px;margin:0 0 12px"></pre>
   <div id="list"></div>
 
 <script>
@@ -117,6 +119,18 @@ object SettingsHtml {
   }
 
   render();
+  document.getElementById('ttl').textContent = 'Nuvio Bridge  (' + Android.version() + ')';
+
+  document.getElementById('diagBtn').onclick = function () {
+    var d = document.getElementById('diag');
+    d.style.display = 'block';
+    d.textContent = 'Test ediliyor...';
+    Android.diagnose();
+  };
+  function onDiag(text) {
+    document.getElementById('diag').textContent = text;
+  }
+
   Android.refresh(); // eski sürümde eklenmiş repoların adını ve sağlayıcı listesini tamamlar
 </script>
 </body>
