@@ -1,7 +1,6 @@
 package com.example.nuviobridge
 
 import com.lagradost.cloudstream3.app
-import kotlinx.coroutines.runBlocking
 import okhttp3.MediaType.Companion.toMediaTypeOrNull
 import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONObject
@@ -22,7 +21,7 @@ class HttpBridge {
         val headers = JSONObject(headersJson).let { j ->
             j.keys().asSequence().associateWith { j.getString(it) }
         }
-        val res = runBlocking {
+        val res = blocking {
             app.custom(
                 method = method.uppercase(),
                 url = url,
