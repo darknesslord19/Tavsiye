@@ -86,6 +86,21 @@ object SettingsDialog {
         }
 
         @JavascriptInterface
+        fun version(): String = Diagnostics.BUILD
+
+        /** TMDB bağlantısını eklentinin kendi istemcisiyle dener, sonucu ekrana yazar. */
+        @JavascriptInterface
+        fun diagnose() {
+            Thread {
+                val text = runCatching { blocking { Diagnostics.run() } }
+                    .getOrElse { "Test çalışmadı: " + (it.message ?: it.javaClass.simpleName) }
+                view.post {
+                    view.evaluateJavascript("onDiag(" + JSONObject.quote(text) + ")", null)
+                }
+            }.start()
+        }
+
+        @JavascriptInterface
         fun removeRepo(url: String) = RepoStore.remove(url)
 
         @JavascriptInterface
