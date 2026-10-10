@@ -116,7 +116,8 @@ object Net {
                 }
                 if (!useCf && (res.code == 403 || res.code == 503)) {
                     res = app.get(url, headers = headers(false), referer = ref, interceptor = killer)
-                    if (res.code in 200..399) synchronized(cfHosts) { cfHosts.add(host) }
+                    // Aşıcı ilk istekte çerezi alıp ikinci istekte geçebilir: başarısız olsa da bir sonraki denemede aşıcıyla devam et
+                    synchronized(cfHosts) { cfHosts.add(host) }
                 }
                 if (res.code in 200..399) {
                     val text = res.text
