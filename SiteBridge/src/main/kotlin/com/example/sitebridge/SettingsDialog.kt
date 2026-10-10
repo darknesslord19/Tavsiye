@@ -92,7 +92,15 @@ object SettingsDialog {
                     ok = r.first
                     text = r.second
                 } catch (e: Throwable) {
-                    text = "✗ Test çalışmadı: " + (e.message ?: e.javaClass.simpleName)
+                    val chain = StringBuilder()
+                    var t: Throwable? = e
+                    var n = 0
+                    while (t != null && n < 4) {
+                        chain.append(t.javaClass.simpleName).append(": ").append(t.message ?: "-").append('\n')
+                        t = t.cause
+                        n++
+                    }
+                    text = "✗ Test çalışmadı:\n" + chain
                 }
                 val first = text.lines().firstOrNull { it.startsWith("✗") || it.startsWith("✓") } ?: text.lines().firstOrNull().orEmpty()
                 SiteStore.setStatus(url, ok, if (ok) "çalışıyor" else first.removePrefix("✗ "))
