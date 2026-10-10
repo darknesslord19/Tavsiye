@@ -45,7 +45,7 @@ object SettingsDialog {
                 sites.put(o)
             }
             val src = JSONArray()
-            SiteStore.sources().forEach { src.put(it) }
+            SiteStore.userSources().forEach { src.put(it) }
             return JSONObject().put("sites", sites).put("sources", src).toString()
         }
 
