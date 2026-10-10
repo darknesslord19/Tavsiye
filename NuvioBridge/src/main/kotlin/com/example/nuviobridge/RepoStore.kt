@@ -79,6 +79,32 @@ object RepoStore {
         prefs()?.edit()?.putBoolean("split", value)?.apply()
     }
 
+    private fun scriptUrl(repo: Repo, p: ProviderInfo): String {
+        val base = repo.url.substringBeforeLast("/") + "/"
+        val path = if (p.file.contains("/")) p.file else "providers/" + p.file
+        return base + path
+    }
+
+    /**
+     * Test sonucuna göre sağlayıcıları açıp kapatır: link verenler açık, vermeyenler kapalı.
+     * Testte yer almayan (zaten kapalı ya da süre aşımına uğrayan) sağlayıcılara dokunmaz.
+     * Dönüş: kapatılan sağlayıcı sayısı.
+     */
+    fun applyTestResults(results: Map<String, Boolean>): Int {
+        var disabled = 0
+        save(list().map { r ->
+            r.copy(providers = r.providers.map { p ->
+                val ok = results[scriptUrl(r, p)]
+                if (ok == null) p
+                else {
+                    if (!ok && p.enabled) disabled++
+                    p.copy(enabled = ok)
+                }
+            })
+        })
+        return disabled
+    }
+
     fun remove(url: String) = save(list().filterNot { it.url == url })
 
     fun setEnabled(url: String, enabled: Boolean) =
