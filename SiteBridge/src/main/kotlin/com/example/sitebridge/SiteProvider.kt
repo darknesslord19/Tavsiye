@@ -423,6 +423,9 @@ class SiteProvider(private val site: SiteInfo) : MainAPI() {
     suspend fun diagnose(): Pair<Boolean, String> {
         val sb = StringBuilder()
         var ok = true
+        if (Scraper.patternErrors.isNotEmpty()) {
+            sb.append("⚠ Derlenemeyen regex: ").append(Scraper.patternErrors.joinToString(" | ")).append('\n')
+        }
         try {
             val pg = Net.page(site.url)
             sb.append("Ana sayfa: açıldı (").append(pg.html.length / 1024).append(" KB)")
