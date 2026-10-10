@@ -88,6 +88,19 @@ object SettingsDialog {
         @JavascriptInterface
         fun version(): String = Diagnostics.BUILD
 
+        /** Sadece Telegram bağlantısını dış uygulamada açar. */
+        @JavascriptInterface
+        fun openUrl(url: String) {
+            if (!url.startsWith("https://t.me/")) return
+            view.post {
+                runCatching {
+                    val i = android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(url))
+                    i.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+                    view.context.startActivity(i)
+                }
+            }
+        }
+
         /** Son Sağlayıcı testine göre: link verenleri açık tut, vermeyenleri kapat. */
         @JavascriptInterface
         fun keepWorking(): String {
