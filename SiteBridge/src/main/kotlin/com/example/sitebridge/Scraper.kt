@@ -24,7 +24,7 @@ data class SiteRow(val title: String, val items: List<SiteMovie>)
 
 data class SiteEpisode(val title: String, val url: String, val season: Int, val number: Int)
 
-data class PlayerSrc(val video: String?, val iframes: List<String>)
+data class PlayerSrc(val video: String?, val iframes: List<String>, val videos: List<String> = emptyList())
 
 /**
  * MainActivity.java'daki tarama motorunun Kotlin karşılığı.
@@ -64,10 +64,6 @@ object Scraper {
     )
     private val LINK_NEXT = Pattern.compile("<link[^>]+rel=[\"']next[\"'][^>]*>", Pattern.CASE_INSENSITIVE)
     private val NEXT_CLS = Pattern.compile(".*\\bnext\\b.*")
-    private val VIDEO_URL = Pattern.compile(
-        "https?://[^\"'\\s<>\\\\]+?\\.(?:m3u8|mp4)(?:\\?[^\"'\\s<>\\\\]*)?", Pattern.CASE_INSENSITIVE
-    )
-    private val IFRAME_SRC = Pattern.compile("<iframe[^>]+src\\s*=\\s*[\"']([^\"']+)[\"']", Pattern.CASE_INSENSITIVE)
     private val EP_HREF = Pattern.compile(
         "href\\s*=\\s*[\\\"']([^\\\"']*(?:\\/)?(?:dublaj\\/|altyazi\\/)?(\\d+)-sezon-(\\d+)-bolum[^\\\"']*\\.html[^\\\"']*)[\\\"']",
         Pattern.CASE_INSENSITIVE
@@ -608,20 +604,202 @@ object Scraper {
     // ====================================================
     // Oynatıcı: sayfadaki video / iframe adayları
     // ====================================================
-    fun findPlayer(html: String, pageUrl: String, rules: JSONObject?): PlayerSrc {
-        val h = html.replace("\\/", "/")
-        var video: String? = null
-        val iframes = ArrayList<String>()
-        val vm = VIDEO_URL.matcher(h)
-        if (vm.find()) video = vm.group()
+    private val PACKED = Pattern.compile(
+        "}\\('(.*?)',\\s*(\\d+),\\s*(\\d+),\\s*'(.*?)'\\.split\\('\\|'\\)", Pattern.DOTALL
+    )
+    private val B64_BLOB = Pattern.compile("[\"'](PGlmcmFt[A-Za-z0-9+/=_-]{16,}|aHR0c[A-Za-z0-9+/=_-]{12,})[\"']")
+    private val ATOB = Pattern.compile("atob\\(\\s*[\"']([A-Za-z0-9+/=_-]{16,})[\"']\\s*\\)")
+    private val VIDEO_ANY = Pattern.compile(
+        "https?://[^\"'\\s<>\\\\]+?\\.(?:m3u8|mp4|mpd)(?:\\?[^\"'\\s<>\\\\]*)?", Pattern.CASE_INSENSITIVE
+    )
+    private val VIDEO_KEY = Pattern.compile(
+        "[\"']?(?:file|src|source|url|video_url|videoUrl|contentUrl|hls|hlsUrl|stream|streamUrl|playlist)[\"']?\\s*[:=]\\s*" +
+            "[\"']((?:https?:)?//[^\"'\\s<>]+)[\"']",
+        Pattern.CASE_INSENSITIVE
+    )
+    private val FRAME_TAG = Pattern.compile("<(?:iframe|embed)\\s[^>]*>", Pattern.CASE_INSENSITIVE or Pattern.DOTALL)
+    private val DATA_EMBED = Pattern.compile(
+        "data-(?:embed|iframe|video|player|link|href|url|src|frame)[\\w-]*\\s*=\\s*[\"']((?:https?:)?//[^\"']+)[\"']",
+        Pattern.CASE_INSENSITIVE
+    )
+    private val JSON_FRAME = Pattern.compile(
+        "[\"'](?:embed_url|embedUrl|iframe|iframe_url|iframeUrl|player_url|playerUrl|embed)[\"']\\s*[:=]\\s*[\"']((?:https?:)?//[^\"']+)[\"']",
+        Pattern.CASE_INSENSITIVE
+    )
+    private val OPTION_URL = Pattern.compile(
+        "<option[^>]+value\\s*=\\s*[\"']((?:https?:)?//[^\"']+)[\"']", Pattern.CASE_INSENSITIVE
+    )
+    private val ALT_SRC = Pattern.compile(
+        "href\\s*=\\s*[\"']([^\"']*[?&](?:kaynak|source|player|alternatif|alt|part|server|sunucu|sid)=[^\"']*)[\"']",
+        Pattern.CASE_INSENSITIVE
+    )
+    private val FRAME_HINTS = arrayOf(
+        "embed", "player", "/e/", "/v/", "iframe", "vid", "stream", "play", "watch", "rapid", "dood", "mixdrop",
+        "moly", "filemoon", "uqload", "streamtape", "upstream", "sibnet", "ok.ru", "vk.com", "fembed", "voe",
+        "pixel", "closeload", "hdfilm", "cdn"
+    )
+    private val BAD_FRAME = arrayOf(
+        "facebook", "google", "twitter", "youtube", "youtu.be", "/ads", "about:", "disqus", "recaptcha",
+        "gstatic", "histats", "instagram", "whatsapp", "telegram", "t.me/"
+    )
+    private val BAD_MEDIA = arrayOf(
+        "doubleclick", "googlesyndication", "/ads/", "adserver", "preroll", "imasdk", "/banner", "analytics",
+        "facebook.com", "googletagmanager"
+    )
+    private val ASSET_EXT = Pattern.compile("(?i)\\.(?:jpe?g|png|gif|webp|svg|css|js|ico|woff2?|ttf)(?:\\?.*)?$")
 
-        val fm = IFRAME_SRC.matcher(h)
-        while (fm.find()) {
-            val src = resolve(pageUrl, fm.group(1)) ?: continue
-            if (!src.contains("facebook") && !src.contains("google") && !src.contains("twitter") &&
-                !src.contains("/ads") && !src.startsWith("about:") && !iframes.contains(src)
-            ) iframes.add(src)
+    // Dean Edwards "packer" ile sıkıştırılmış JS'in açılması
+    private fun digit(c: Char): Int = when (c) {
+        in '0'..'9' -> c - '0'
+        in 'a'..'z' -> c - 'a' + 10
+        in 'A'..'Z' -> c - 'A' + 36
+        else -> -1
+    }
+
+    private fun unpackOne(payload: String, radix: Int, dict: List<String>): String {
+        return Regex("\\b\\w+\\b").replace(payload) { m ->
+            val word = m.value
+            var idx = 0
+            var ok = radix in 2..62
+            if (ok) {
+                for (ch in word) {
+                    val d = digit(ch)
+                    if (d < 0 || d >= radix) {
+                        ok = false
+                        break
+                    }
+                    idx = idx * radix + d
+                }
+            }
+            if (ok && idx < dict.size && dict[idx].isNotEmpty()) dict[idx] else word
         }
+    }
+
+    private fun b64decode(s0: String): String? {
+        return try {
+            val tbl = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
+            val s = s0.replace('-', '+').replace('_', '/').trimEnd('=')
+            val out = java.io.ByteArrayOutputStream()
+            var buf = 0
+            var bits = 0
+            for (c in s) {
+                val v = tbl.indexOf(c)
+                if (v < 0) return null
+                buf = (buf shl 6) or v
+                bits += 6
+                if (bits >= 8) {
+                    bits -= 8
+                    out.write((buf shr bits) and 0xFF)
+                }
+            }
+            String(out.toByteArray(), Charsets.UTF_8)
+        } catch (e: Exception) {
+            null
+        }
+    }
+
+    /** Sayfa + açılmış packed JS + çözülmüş base64 parçaları (video/iframe aramak için tek metin). */
+    fun expand(html: String): String {
+        val sb = StringBuilder(html.replace("\\/", "/"))
+        try {
+            val m = PACKED.matcher(html)
+            var n = 0
+            while (m.find() && n < 6) {
+                n++
+                try {
+                    val payload = m.group(1)!!.replace("\\'", "'").replace("\\\\", "\\")
+                    val dict = m.group(4)!!.split("|")
+                    sb.append('\n').append(unpackOne(payload, m.group(2)!!.toInt(), dict).replace("\\/", "/"))
+                } catch (ignored: Exception) {
+                }
+            }
+            for (p in arrayOf(B64_BLOB, ATOB)) {
+                val bm = p.matcher(html)
+                var n2 = 0
+                while (bm.find() && n2 < 20) {
+                    n2++
+                    val dec = b64decode(bm.group(1)!!) ?: continue
+                    if (dec.contains("<") || dec.startsWith("http")) sb.append('\n').append(dec.replace("\\/", "/"))
+                }
+            }
+        } catch (ignored: Exception) {
+        }
+        return sb.toString()
+    }
+
+    private fun badMedia(u: String): Boolean {
+        val l = u.lowercase()
+        return BAD_MEDIA.any { l.contains(it) }
+    }
+
+    fun extractVideos(exp: String, pageUrl: String): List<String> {
+        val out = LinkedHashSet<String>()
+        val vm = VIDEO_ANY.matcher(exp)
+        while (vm.find()) if (!badMedia(vm.group())) out.add(vm.group())
+        val km = VIDEO_KEY.matcher(exp)
+        while (km.find()) {
+            val raw = km.group(1)!!
+            val l = raw.lowercase()
+            if (!(l.contains(".m3u8") || l.contains(".mp4") || l.contains(".mpd"))) continue
+            val full = resolve(pageUrl, raw) ?: continue
+            if (!badMedia(full) && !ASSET_EXT.matcher(full).find()) out.add(full)
+        }
+        return ArrayList(out)
+    }
+
+    private fun goodFrame(u: String): Boolean {
+        val l = u.lowercase()
+        if (BAD_FRAME.any { l.contains(it) }) return false
+        return !ASSET_EXT.matcher(l).find()
+    }
+
+    fun extractIframes(exp: String, pageUrl: String): List<String> {
+        val out = LinkedHashSet<String>()
+        fun add(raw: String?) {
+            if (raw.isNullOrBlank()) return
+            val full = resolve(pageUrl, raw.trim()) ?: return
+            if (full != pageUrl && goodFrame(full)) out.add(full)
+        }
+        val ft = FRAME_TAG.matcher(exp)
+        while (ft.find()) {
+            val tag = ft.group()
+            add(attr(tag, "src").takeUnless { it.isNullOrBlank() || it.startsWith("about:") }
+                ?: attr(tag, "data-src") ?: attr(tag, "data-lazy-src") ?: attr(tag, "data-litespeed-src")
+                ?: attr(tag, "data-embed-src"))
+        }
+        val dm = DATA_EMBED.matcher(exp)
+        while (dm.find()) {
+            val v = dm.group(1)!!
+            val l = v.lowercase()
+            if (FRAME_HINTS.any { l.contains(it) }) add(v)
+        }
+        val jm = JSON_FRAME.matcher(exp)
+        while (jm.find()) add(jm.group(1))
+        val om = OPTION_URL.matcher(exp)
+        while (om.find()) {
+            val v = om.group(1)!!
+            val l = v.lowercase()
+            if (FRAME_HINTS.any { l.contains(it) }) add(v)
+        }
+        return ArrayList(out)
+    }
+
+    /** Sayfadaki alternatif kaynak sayfaları (?kaynak=2, ?player=1 ...). Aynı siteden, en çok 3. */
+    fun altSourcePages(html: String, pageUrl: String): List<String> {
+        val out = LinkedHashSet<String>()
+        val host = hostOf(pageUrl)
+        val m = ALT_SRC.matcher(html)
+        while (m.find() && out.size < 3) {
+            val full = resolve(pageUrl, m.group(1)) ?: continue
+            if (full != pageUrl && hostOf(full) == host) out.add(full)
+        }
+        return ArrayList(out)
+    }
+
+    fun findPlayer(html: String, pageUrl: String, rules: JSONObject?): PlayerSrc {
+        val exp = expand(html)
+        val videos = ArrayList(extractVideos(exp, pageUrl))
+        val iframes = ArrayList(extractIframes(exp, pageUrl))
 
         try {
             val pl = rules?.optJSONObject("player")
@@ -629,29 +807,31 @@ object Scraper {
                 val d = doc(html, pageUrl)
                 var rv = extract(d, pl.optString("video", ""))
                 if (rv == null && pl.optString("videoRegex", "").isNotEmpty()) {
-                    val mm = Pattern.compile(pl.optString("videoRegex"), Pattern.DOTALL).matcher(h)
+                    val mm = Pattern.compile(pl.optString("videoRegex"), Pattern.DOTALL).matcher(exp)
                     if (mm.find()) rv = if (mm.groupCount() >= 1) mm.group(1) else mm.group()
                 }
                 if (rv != null) rv = resolve(pageUrl, rv)
                 var rf = extract(d, pl.optString("iframe", ""))
                 if (rf != null) rf = resolve(pageUrl, rf)
-                if (rv != null) video = rv
+                if (rv != null) {
+                    videos.remove(rv)
+                    videos.add(0, rv)
+                }
                 if (rf != null) {
                     iframes.remove(rf)
                     iframes.add(0, rf)
-                    if (rv == null) video = null
+                    if (rv == null) videos.clear()
                 }
             }
         } catch (ignored: Exception) {
         }
-        return PlayerSrc(video, iframes)
+        return PlayerSrc(videos.firstOrNull(), iframes, videos)
     }
 
-    /** Herhangi bir metinde (iframe içeriği vb.) video adresi arar. */
-    fun findVideoIn(html: String): String? {
-        val m = VIDEO_URL.matcher(html.replace("\\/", "/"))
-        return if (m.find()) m.group() else null
-    }
+    /** Herhangi bir sayfada (iframe içeriği vb.) video adresleri arar. */
+    fun findVideos(html: String, pageUrl: String): List<String> = extractVideos(expand(html), pageUrl)
+
+    fun findVideoIn(html: String): String? = findVideos(html, "https://x.invalid/").firstOrNull()
 
     // ====================================================
     // M3U / M3U8 listeleri
