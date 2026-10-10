@@ -10,7 +10,7 @@ import java.util.concurrent.TimeUnit
 /** Ayarlar ekranındaki test düğmelerinin çalıştırdığı kontroller. Anahtarı ekrana yazmaz. */
 object Diagnostics {
     // Yeni bir sürüm yüklediğini bu etiketten anlarsın. Her değişiklikte güncellenir.
-    const val BUILD = "v6"
+    const val BUILD = "v9"
 
     suspend fun run(): String {
         val sb = StringBuilder()
@@ -65,17 +65,28 @@ object Diagnostics {
             scripts.forEach { ref ->
                 ecs.submit(Callable {
                     val label = ref.repo + " · " + ref.provider
+                    // Provider'ın console çıktısı: link gelmeyen ya da hata veren sağlayıcının sebebini gösterir.
+                    val log = StringBuilder()
+                    fun logNote(): String {
+                        val t = log.toString().trim().replace("\n", " | ")
+                        return if (t.isEmpty()) "" else "\n    günlük: " + t.take(300)
+                    }
                     try {
                         val script = blocking { app.get(ref.url).text }
-                        val streams = JsRunner.getStreams(script, "603", "movie", null, null)
-                        label + ": " + streams.size + " link"
+                        val streams = JsRunner.getStreams(script, "603", "movie", null, null, log)
+                        val first = streams.firstOrNull()
+                        val extra = if (first == null) "" else
+                            " (ilk: " + StreamKind.detect(first) + ", " +
+                                (runCatching { java.net.URI(first.url).host }.getOrNull() ?: "?") + ")"
+                        label + ": " + streams.size + " link" + extra +
+                            (if (streams.isEmpty() || log.contains("WebView")) logNote() else "")
                     } catch (e: Throwable) {
-                        label + ": HATA " + (e.message ?: e.javaClass.simpleName).take(120)
+                        label + ": HATA " + (e.message ?: e.javaClass.simpleName).take(120) + logNote()
                     }
                 })
             }
 
-            val deadline = System.currentTimeMillis() + 60_000L
+            val deadline = System.currentTimeMillis() + 150_000L
             var remaining = scripts.size
             while (remaining > 0) {
                 val left = deadline - System.currentTimeMillis()
@@ -83,10 +94,11 @@ object Diagnostics {
                 val done = ecs.poll(left, TimeUnit.MILLISECONDS) ?: break
                 remaining--
                 val line = runCatching { done.get() }.getOrDefault("(okunamadı)")
-                if (!line.contains(": HATA") && !line.endsWith(": 0 link") && line != "(okunamadı)") working++
+                val head = line.substringBefore("\n") // ilk satır; günlük notu sonraki satırda
+                if (!head.contains(": HATA") && !head.endsWith(": 0 link") && head != "(okunamadı)") working++
                 lines += line
             }
-            if (remaining > 0) lines += remaining.toString() + " sağlayıcı 60 sn içinde yanıt vermedi"
+            if (remaining > 0) lines += remaining.toString() + " sağlayıcı 150 sn içinde yanıt vermedi"
         } finally {
             pool.shutdownNow()
         }
