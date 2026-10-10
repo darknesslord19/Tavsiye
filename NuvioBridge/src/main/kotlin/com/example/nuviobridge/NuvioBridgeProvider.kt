@@ -167,12 +167,16 @@ class NuvioBridgeProvider(private val only: ScriptRef? = null) : MainAPI() {
         val pool = Executors.newFixedThreadPool(minOf(MAX_PARALLEL, scripts.size))
         var found = false
         try {
-            val ecs = ExecutorCompletionService<Pair<ScriptRef, List<JsStream>>>(pool)
+            val ecs = ExecutorCompletionService<Pair<ScriptRef, List<Pair<JsStream, String>>>>(pool)
             scripts.forEach { ref ->
                 ecs.submit(Callable {
                     // Her provider kendi thread'inde, kendi JS motoruyla çalışır.
                     val script = blocking { app.get(ref.url).text }
-                    ref to JsRunner.getStreams(script, id, type, season, episode)
+                    val streams = JsRunner.getStreams(script, id, type, season, episode)
+                    // Her akışın gerçek türünü belirle; video olmayanları (web sayfası vb.) ele.
+                    ref to streams.take(12)
+                        .map { it to StreamKind.detect(it) }
+                        .filter { it.second != StreamKind.SKIP }
                 })
             }
 
@@ -185,15 +189,18 @@ class NuvioBridgeProvider(private val only: ScriptRef? = null) : MainAPI() {
                 remaining--
                 // Hata veren provider diğerlerini durdurmasın.
                 val (ref, streams) = runCatching { future.get() }.getOrNull() ?: continue
-                for (st in streams) {
+                for ((st, kind) in streams) {
                     found = true
                     callback(
                         newExtractorLink(
                             source = ref.provider,
                             name = ref.repo + " · " + ref.provider + " - " + st.name,
                             url = st.url,
-                            type = if (st.url.contains(".m3u8")) ExtractorLinkType.M3U8
-                            else ExtractorLinkType.VIDEO,
+                            type = when (kind) {
+                                StreamKind.M3U8 -> ExtractorLinkType.M3U8
+                                StreamKind.DASH -> ExtractorLinkType.DASH
+                                else -> ExtractorLinkType.VIDEO
+                            },
                         ) {
                             this.quality = st.quality
                             this.headers = st.headers
