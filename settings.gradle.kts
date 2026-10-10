@@ -1,2 +1,2 @@
-rootProject.name = "NuvioBridge"
-include("NuvioBridge")
+rootProject.name = "SiteBridge"
+include("SiteBridge")
