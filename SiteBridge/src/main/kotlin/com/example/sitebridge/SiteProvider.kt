@@ -9,10 +9,15 @@ import com.lagradost.cloudstream3.utils.loadExtractor
 import com.lagradost.cloudstream3.utils.newExtractorLink
 import java.net.URLEncoder
 import java.text.Normalizer
+import java.util.concurrent.ConcurrentHashMap
 
 /**
  * Tek bir siteyi CloudStream kaynağı olarak gösterir. Mantık MainActivity.java'daki
  * ana sayfa / kategori / arama / detay / oynatıcı akışının karşılığıdır.
+ *
+ * Kaynak seçicide: "Ana Sayfa" + (önbellekteki) en çok 15 kategori ayrı satır olarak görünür.
+ * Kategoriler ilk açılışta ana sayfa içinde gösterilir ve önbelleğe yazılır; sonraki açılışlarda
+ * CloudStream'in kendi satırları (sayfalamalı) olarak gelir.
  */
 class SiteProvider(private val site: SiteInfo) : MainAPI() {
     override var name = site.name
@@ -21,18 +26,35 @@ class SiteProvider(private val site: SiteInfo) : MainAPI() {
     override val hasMainPage = true
     override val supportedTypes = setOf(TvType.Movie, TvType.TvSeries)
 
-    override val mainPage = mainPageOf(site.url to "Ana Sayfa")
-
     companion object {
-        private const val CAT_ROWS = 6          // ana sayfada otomatik yüklenen kategori satırı
-        private const val MAX_IFRAMES = 4       // oynatıcı sayfasında denenecek iframe sayısı
+        const val CAT_MAX = 15              // kaynak seçicide gösterilen en çok kategori satırı
+        private const val MAX_IFRAMES = 6   // bir sayfada denenecek iframe sayısı
+        private const val EXTRACTOR_MS = 20_000L
+        private const val WEBVIEW_MS = 25_000L
         private val SEARCH_PATHS = listOf(
             "?s={q}", "arama/{q}", "search?q={q}", "ara?q={q}", "arama?q={q}", "?q={q}",
         )
     }
 
+    // Kaynak seçicideki satırlar: Ana Sayfa + önbellekteki kategoriler. CloudStream her yüklemede okur.
+    @Volatile private var served: Set<String> = emptySet()
+
+    override val mainPage: List<MainPageData>
+        get() {
+            val cats = if (site.url.isBlank()) emptyList() else SiteStore.cats(site.url).take(CAT_MAX)
+            served = cats.map { it.url }.toSet()
+            val pairs = ArrayList<Pair<String, String>>()
+            pairs.add(site.url to "Ana Sayfa")
+            cats.forEach { pairs.add(it.url to it.name) }
+            return mainPageOf(*pairs.toTypedArray())
+        }
+
     // M3U listesiyse içeriği burada tutulur (arama için)
     @Volatile private var m3uGroups: Map<String, List<SiteMovie>>? = null
+
+    // Son başarılı ana sayfa (site geçici olarak açılmazsa bu gösterilir)
+    @Volatile private var lastHome: List<HomePageList>? = null
+    private val nextPages = ConcurrentHashMap<String, String>()
 
     // ---------------------------------------------------------------- yardımcılar
     private fun toSearch(m: SiteMovie, referer: String): SearchResponse {
@@ -62,41 +84,92 @@ class SiteProvider(private val site: SiteInfo) : MainAPI() {
         }
     }
 
-    // ---------------------------------------------------------------- ana sayfa
+    // ---------------------------------------------------------------- ana sayfa / kategoriler
     override suspend fun getMainPage(page: Int, request: MainPageRequest): HomePageResponse {
         requireSite()
-        if (page > 1) return newHomePageResponse(emptyList<HomePageList>(), false)
+        return if (request.data == site.url) homePage(page) else categoryPage(page, request)
+    }
 
-        val homeUrl = site.url
-        val html = Net.html(homeUrl)
+    private suspend fun homePage(page: Int): HomePageResponse {
+        if (page > 1) return newHomePageResponse(emptyList<HomePageList>(), false)
+        try {
+            val lists = buildHome()
+            lastHome = lists
+            return newHomePageResponse(lists, false)
+        } catch (e: Exception) {
+            // Site bir an açılmadıysa son başarılı içeriği göster
+            val old = lastHome
+            if (old != null && old.isNotEmpty()) return newHomePageResponse(old, false)
+            if (e is ErrorLoadingException) throw e
+            throw ErrorLoadingException(site.name + ": " + (e.message ?: e.javaClass.simpleName))
+        }
+    }
+
+    private suspend fun buildHome(): List<HomePageList> {
+        val pg = Net.page(site.url)
+        val homeUrl = pg.url
+        val html = pg.html
         val lists = ArrayList<HomePageList>()
 
         if (Scraper.isM3u(html)) {
             val groups = Scraper.parseM3u(html)
             m3uGroups = groups
-            for ((g, items) in groups.entries.take(15)) {
+            for ((g, items) in groups.entries.take(CAT_MAX)) {
                 lists.add(HomePageList(g, items.take(60).map { toSearch(it, homeUrl) }))
             }
         } else {
             for (row in Scraper.parseSections(html, homeUrl, site.rules)) {
                 lists.add(HomePageList(row.title, row.items.map { toSearch(it, homeUrl) }))
             }
-            // Kategori sayfalarından ek satırlar (MainActivity'deki tembel kategori satırları)
-            val cats = Scraper.parseCategories(html, homeUrl, site.rules).take(CAT_ROWS)
-            val rows = parallel(cats) { c ->
-                val h = Net.html(c.url)
-                val items = Scraper.parseMovies(h, c.url, site.rules)
-                if (items.size >= 2) HomePageList(c.name, items.map { toSearch(it, c.url) }) else null
+            val cats = Scraper.parseCategories(html, homeUrl, site.rules).take(CAT_MAX)
+            if (cats.isNotEmpty()) SiteStore.saveCats(site.url, cats)
+
+            // Kaynak seçicide henüz ayrı satır olmayan kategorileri burada göster (ilk açılış).
+            val missing = cats.filter { !served.contains(it.url) }
+            val rows = parallel(missing, 5) { c ->
+                val h = Net.page(c.url, homeUrl)
+                val items = Scraper.parseMovies(h.html, h.url, site.rules)
+                if (items.isNotEmpty()) HomePageList(c.name, items.map { toSearch(it, h.url) }) else null
             }
             for (r in rows) if (r != null && lists.none { it.name == r.name }) lists.add(r)
+
+            // Kategorisi bulunamayan sitede sonraki sayfaları ek satır olarak ver
+            if (cats.size < 3) {
+                var nextUrl = Scraper.parseNext(html, homeUrl, site.rules)
+                var n = 2
+                while (nextUrl != null && n <= 3) {
+                    val np = Net.pageOrNull(nextUrl, homeUrl) ?: break
+                    val items = Scraper.parseMovies(np.html, np.url, site.rules)
+                    if (items.isNotEmpty()) lists.add(HomePageList("Sayfa $n", items.map { toSearch(it, np.url) }))
+                    nextUrl = Scraper.parseNext(np.html, np.url, site.rules)
+                    n++
+                }
+            }
         }
 
         if (lists.isEmpty()) {
             throw ErrorLoadingException(
-                "Bu sitede içerik bulunamadı. Site JavaScript ile yükleniyor olabilir; ayarlardan site kuralı (rules) eklemeyi dene."
+                site.name + ": içerik bulunamadı. Site JavaScript ile yükleniyor olabilir; ayarlardan site kuralı (rules) eklemeyi dene."
             )
         }
-        return newHomePageResponse(lists, false)
+        return lists
+    }
+
+    private suspend fun categoryPage(page: Int, request: MainPageRequest): HomePageResponse {
+        val cat = request.data
+        val url = if (page <= 1) cat else nextPages["$cat#$page"] ?: (cat.trimEnd('/') + "/page/" + page + "/")
+        val pg = Net.page(url, site.url)
+        val items = Scraper.parseMovies(pg.html, pg.url, site.rules)
+        if (items.isEmpty()) {
+            if (page > 1) return newHomePageResponse(request.name, emptyList<SearchResponse>(), false)
+            throw ErrorLoadingException(site.name + " · " + request.name + ": içerik bulunamadı")
+        }
+        val next = Scraper.parseNext(pg.html, pg.url, site.rules)
+        if (next != null) {
+            if (nextPages.size > 400) nextPages.clear()
+            nextPages["$cat#${page + 1}"] = next
+        }
+        return newHomePageResponse(request.name, items.map { toSearch(it, pg.url) }, next != null)
     }
 
     // ---------------------------------------------------------------- arama
@@ -105,16 +178,14 @@ class SiteProvider(private val site: SiteInfo) : MainAPI() {
 
     override suspend fun search(query: String): List<SearchResponse> {
         requireSite()
-        val homeUrl = site.url
+        val homePg = Net.pageOrNull(site.url)
+        val homeUrl = homePg?.url ?: site.url
 
         // M3U: bellekte ara
         var groups = m3uGroups
-        if (groups == null) {
-            val h = Net.htmlOrNull(homeUrl)
-            if (h != null && Scraper.isM3u(h)) {
-                groups = Scraper.parseM3u(h)
-                m3uGroups = groups
-            }
+        if (groups == null && homePg != null && Scraper.isM3u(homePg.html)) {
+            groups = Scraper.parseM3u(homePg.html)
+            m3uGroups = groups
         }
         if (groups != null) {
             val needle = fold(query)
@@ -127,19 +198,18 @@ class SiteProvider(private val site: SiteInfo) : MainAPI() {
         val custom = site.rules?.optString("search", "").orEmpty()
         val base = Scraper.origin(homeUrl)
         val candidates = if (custom.isNotBlank()) listOf(custom) else SEARCH_PATHS
-        val homeHtml = Net.htmlOrNull(homeUrl)
-        val homeUrls = if (homeHtml != null) Scraper.parseMovies(homeHtml, homeUrl, site.rules).map { it.url }.toSet()
+        val homeUrls = if (homePg != null) Scraper.parseMovies(homePg.html, homeUrl, site.rules).map { it.url }.toSet()
         else emptySet()
 
         for (c in candidates) {
             val url = (if (c.startsWith("http")) c else base + c.trimStart('/')).replace("{q}", q)
-            val h = Net.htmlOrNull(url, homeUrl) ?: continue
-            val items = Scraper.parseMovies(h, url, site.rules)
+            val h = Net.pageOrNull(url, homeUrl) ?: continue
+            val items = Scraper.parseMovies(h.html, h.url, site.rules)
             if (items.isEmpty()) continue
             // Arama desteklemeyen site ana sayfayı döndürür; onu sonuç sayma.
             val overlap = items.count { homeUrls.contains(it.url) }
             if (homeUrls.isNotEmpty() && overlap * 5 >= items.size * 4) continue
-            return items.map { toSearch(it, url) }
+            return items.map { toSearch(it, h.url) }
         }
         return emptyList()
     }
@@ -155,39 +225,34 @@ class SiteProvider(private val site: SiteInfo) : MainAPI() {
         }
 
         val seriesUrl = Scraper.seriesUrlFor(url)
-        var html = Net.htmlOrNull(seriesUrl)
-        var baseUrl = seriesUrl
-        var eps = Scraper.parseEpisodes(html, seriesUrl)
+        var pg = Net.pageOrNull(seriesUrl)
+        var eps = Scraper.parseEpisodes(pg?.html, pg?.url ?: seriesUrl)
 
         // Kart adresi doğrudan bölüm sayfası olabilir; oradan ya da sayfadaki dizi bağlantısından bölümleri bul.
         if (eps.isEmpty()) {
-            val h2 = Net.htmlOrNull(url)
-            if (h2 != null) {
-                eps = Scraper.parseEpisodes(h2, url)
-                if (html == null) {
-                    html = h2
-                    baseUrl = url
-                }
+            val p2 = Net.pageOrNull(url)
+            if (p2 != null) {
+                eps = Scraper.parseEpisodes(p2.html, p2.url)
+                if (pg == null) pg = p2
                 if (eps.isEmpty()) {
-                    for (su in Scraper.seriesLinks(h2, url)) {
+                    for (su in Scraper.seriesLinks(p2.html, p2.url)) {
                         if (su == seriesUrl) continue
-                        val h3 = Net.htmlOrNull(su)
-                        val e3 = Scraper.parseEpisodes(h3, su)
+                        val p3 = Net.pageOrNull(su) ?: continue
+                        val e3 = Scraper.parseEpisodes(p3.html, p3.url)
                         if (e3.isNotEmpty()) {
                             eps = e3
-                            html = h3
-                            baseUrl = su
+                            pg = p3
                             break
                         }
                     }
                 }
             }
         }
-        if (html == null) throw ErrorLoadingException("Sayfa açılamadı: $url")
+        val page = pg ?: throw ErrorLoadingException("Sayfa açılamadı: $url")
 
-        val title = Scraper.pageTitle(html) ?: Scraper.hostOf(url)
-        val poster = Scraper.pagePoster(html, baseUrl)
-        val desc = Scraper.metaDescription(html)
+        val title = Scraper.pageTitle(page.html) ?: Scraper.hostOf(url)
+        val poster = Scraper.pagePoster(page.html, page.url)
+        val desc = Scraper.metaDescription(page.html)
 
         if (eps.isEmpty()) {
             return newMovieLoadResponse(title, url, TvType.Movie, url) {
@@ -209,33 +274,53 @@ class SiteProvider(private val site: SiteInfo) : MainAPI() {
     }
 
     // ---------------------------------------------------------------- oynatma
+    private fun qualityOf(u: String): Int {
+        val m = Regex("""(?<![0-9])(2160|1440|1080|720|480|360|240)p""").find(u)
+        return m?.groupValues?.get(1)?.toIntOrNull() ?: Qualities.Unknown.value
+    }
+
     private suspend fun emitVideo(
         video: String,
         referer: String,
         label: String,
         extra: Map<String, String>,
+        seen: MutableSet<String>,
         callback: (ExtractorLink) -> Unit,
-    ) {
+    ): Boolean {
         val clean = video.replace(" ", "%20")
+        if (!seen.add(clean)) return false
         val path = clean.lowercase().substringBefore("?")
-        val type = if (path.contains("m3u8")) ExtractorLinkType.M3U8 else ExtractorLinkType.VIDEO
+        val type = when {
+            path.contains("m3u8") -> ExtractorLinkType.M3U8
+            path.endsWith(".mpd") -> ExtractorLinkType.DASH
+            else -> ExtractorLinkType.VIDEO
+        }
         val hdr = HashMap<String, String>()
         hdr["User-Agent"] = Net.UA
         hdr.putAll(extra)
         callback(
             newExtractorLink(name, label, clean, type) {
                 this.referer = extra["Referer"] ?: referer
-                this.quality = Qualities.Unknown.value
+                this.quality = qualityOf(clean)
                 this.headers = hdr
             }
         )
+        return true
     }
 
-    /** Bir iframe adresinden link çıkarır: önce CloudStream çıkarıcıları, sonra sayfa taraması, en son WebView. */
+    private fun labelFor(u: String): String = name + " • " + Scraper.hostOf(u)
+
+    /**
+     * Bir iframe adresinden link çıkarır:
+     *  1) CloudStream'in hazır çıkarıcıları (bilinen oynatıcı siteleri)
+     *  2) iframe sayfasını oku: packed JS / base64 / JSON içinden video ve iç içe iframe
+     *  3) gerçek tarayıcıda aç, ağda geçen .m3u8/.mp4 adresini yakala
+     */
     private suspend fun fromIframe(
         iframe: String,
         referer: String,
         depth: Int,
+        seen: MutableSet<String>,
         subtitleCallback: (SubtitleFile) -> Unit,
         callback: (ExtractorLink) -> Unit,
     ): Boolean {
@@ -245,37 +330,39 @@ class SiteProvider(private val site: SiteInfo) : MainAPI() {
             callback(it)
         }
 
-        // 1) CloudStream'in hazır çıkarıcıları (bilinen oynatıcı siteleri)
-        try {
+        // 1) hazır çıkarıcılar (takılırsa bırakılır)
+        timed(EXTRACTOR_MS) {
             loadExtractor(iframe, referer, subtitleCallback, wrap)
-        } catch (ignored: Exception) {
         }
         if (found) return true
 
-        // 2) Iframe sayfasını oku, içinde video / iç içe iframe ara
-        val h = Net.htmlOrNull(iframe, referer)
-        if (h != null) {
-            val v = Scraper.findVideoIn(h)
-            if (v != null) {
-                emitVideo(v, iframe, name, mapOf("Referer" to iframe), wrap)
-                return true
+        // 2) iframe sayfasını oku
+        val pg = Net.pageOrNull(iframe, referer)
+        if (pg != null) {
+            val ref = mapOf("Referer" to iframe, "Origin" to Scraper.origin(iframe).trimEnd('/'))
+            for (v in Scraper.findVideos(pg.html, pg.url)) {
+                if (emitVideo(v, iframe, labelFor(iframe), ref, seen, wrap)) found = true
             }
+            if (found) return true
             if (depth < 2) {
-                for (inner in Scraper.findPlayer(h, iframe, null).iframes.take(MAX_IFRAMES)) {
+                for (inner in Scraper.findPlayer(pg.html, pg.url, null).iframes.take(MAX_IFRAMES)) {
                     if (inner == iframe) continue
-                    if (fromIframe(inner, iframe, depth + 1, subtitleCallback, callback)) return true
+                    if (fromIframe(inner, iframe, depth + 1, seen, subtitleCallback, callback)) return true
                 }
             }
         }
 
-        // 3) Gerçek tarayıcıda aç, ağda geçen ilk .m3u8/.mp4 adresini yakala (MainActivity'deki WebView oynatıcının karşılığı)
-        try {
-            val r = app.get(iframe, referer = referer, interceptor = WebViewResolver(Regex("""\.(m3u8|mp4)""")))
-            val u = r.url
-            if (Regex("""\.(m3u8|mp4)""").containsMatchIn(u)) {
-                emitVideo(u, iframe, name, mapOf("Referer" to iframe), wrap)
-            }
-        } catch (ignored: Exception) {
+        // 3) gerçek tarayıcıda dinle
+        val sniffed = timed(WEBVIEW_MS) {
+            app.get(
+                iframe,
+                referer = referer,
+                interceptor = WebViewResolver(Regex("""\.(m3u8|mp4|mpd)"""))
+            ).url
+        }
+        if (sniffed != null && Regex("""\.(m3u8|mp4|mpd)""").containsMatchIn(sniffed) && !sniffed.contains("/ads/")) {
+            val ref = mapOf("Referer" to iframe, "Origin" to Scraper.origin(iframe).trimEnd('/'))
+            if (emitVideo(sniffed, iframe, labelFor(iframe), ref, seen, wrap)) found = true
         }
         return found
     }
@@ -286,13 +373,14 @@ class SiteProvider(private val site: SiteInfo) : MainAPI() {
         subtitleCallback: (SubtitleFile) -> Unit,
         callback: (ExtractorLink) -> Unit,
     ): Boolean {
+        val seen = HashSet<String>()
+
         // M3U / doğrudan yayın
         if (Scraper.isDirectUrl(data)) {
             val base = data.substringBefore("#sb=")
             val hdr = HashMap<String, String>()
             val link = Scraper.splitStreamHeaders(base, hdr)
-            emitVideo(link, hdr["Referer"] ?: "", name, hdr, callback)
-            return true
+            return emitVideo(link, hdr["Referer"] ?: "", name, hdr, seen, callback)
         }
 
         var found = false
@@ -301,16 +389,103 @@ class SiteProvider(private val site: SiteInfo) : MainAPI() {
             callback(it)
         }
 
-        val html = Net.html(data)
-        val src = Scraper.findPlayer(html, data, site.rules)
-
-        if (src.video != null) {
-            emitVideo(src.video, data, name, mapOf("Referer" to data), wrap)
-            return true
+        val first = Net.page(data)
+        val pages = ArrayList<Page>()
+        pages.add(first)
+        // Alternatif kaynak sayfaları (?kaynak=2 ...)
+        for (alt in Scraper.altSourcePages(first.html, first.url)) {
+            Net.pageOrNull(alt, data)?.let { pages.add(it) }
         }
-        for (f in src.iframes.take(MAX_IFRAMES)) {
-            fromIframe(f, data, 0, subtitleCallback, wrap)
+
+        for (pg in pages) {
+            val src = Scraper.findPlayer(pg.html, pg.url, site.rules)
+            val ref = mapOf("Referer" to pg.url)
+            for (v in src.videos) emitVideo(v, pg.url, name, ref, seen, wrap)
+            if (found) return true
+            for (f in src.iframes.take(MAX_IFRAMES)) {
+                fromIframe(f, pg.url, 0, seen, subtitleCallback, wrap)
+            }
+            if (found) return true
+        }
+
+        // Son çare: sayfanın kendisini tarayıcıda aç ve ağdaki videoyu yakala
+        val sniffed = timed(WEBVIEW_MS) {
+            app.get(first.url, interceptor = WebViewResolver(Regex("""\.(m3u8|mp4|mpd)"""))).url
+        }
+        if (sniffed != null && Regex("""\.(m3u8|mp4|mpd)""").containsMatchIn(sniffed) && !sniffed.contains("/ads/")) {
+            emitVideo(sniffed, first.url, name, mapOf("Referer" to first.url), seen, wrap)
         }
         return found
+    }
+
+    // ---------------------------------------------------------------- site testi (ayar ekranı)
+    /** Siteyi uçtan uca dener: ana sayfa -> kategori -> ilk içerik -> oynatma bağlantısı. Dönüş: (başarılı mı, rapor) */
+    suspend fun diagnose(): Pair<Boolean, String> {
+        val sb = StringBuilder()
+        var ok = true
+        try {
+            val pg = Net.page(site.url)
+            sb.append("Ana sayfa: açıldı (").append(pg.html.length / 1024).append(" KB)")
+            if (pg.url != site.url) sb.append(" → ").append(Scraper.hostOf(pg.url))
+            sb.append('\n')
+
+            if (Scraper.isM3u(pg.html)) {
+                val g = Scraper.parseM3u(pg.html)
+                sb.append("M3U listesi: ").append(g.size).append(" kategori, ").append(g.values.sumOf { it.size }).append(" içerik\n")
+                return Pair(g.isNotEmpty(), sb.toString())
+            }
+
+            val rows = Scraper.parseSections(pg.html, pg.url, site.rules)
+            val movies = Scraper.parseMovies(pg.html, pg.url, site.rules)
+            sb.append("Satır: ").append(rows.size).append(", film: ").append(movies.size).append('\n')
+            if (movies.isEmpty()) {
+                sb.append("✗ Film kartı bulunamadı (site JavaScript ile yükleniyor olabilir, kural gerekebilir)\n")
+                return Pair(false, sb.toString())
+            }
+
+            val cats = Scraper.parseCategories(pg.html, pg.url, site.rules).take(CAT_MAX)
+            sb.append("Kategori: ").append(cats.size)
+            if (cats.isNotEmpty()) sb.append(" (").append(cats.take(5).joinToString { it.name }).append("…)")
+            sb.append('\n')
+            if (cats.isNotEmpty()) {
+                SiteStore.saveCats(site.url, cats)
+                val cp = Net.pageOrNull(cats[0].url, pg.url)
+                val n = if (cp != null) Scraper.parseMovies(cp.html, cp.url, site.rules).size else -1
+                sb.append("İlk kategori sayfası: ").append(if (n < 0) "✗ açılmadı" else "$n film").append('\n')
+                if (n <= 0) ok = false
+            }
+
+            val target = movies[0]
+            sb.append("Deneme içeriği: ").append(target.title).append('\n')
+            val lr = load(target.url)
+            var data = target.url
+            if (lr is TvSeriesLoadResponse) {
+                sb.append("Dizi: ").append(lr.episodes.size).append(" bölüm\n")
+                data = lr.episodes.firstOrNull()?.data ?: target.url
+            } else {
+                sb.append("Film sayfası açıldı\n")
+            }
+
+            val dp = Net.page(data, pg.url)
+            val ps = Scraper.findPlayer(dp.html, dp.url, site.rules)
+            sb.append("Oynatıcı sayfası: video ").append(ps.videos.size).append(", iframe ").append(ps.iframes.size)
+            if (ps.iframes.isNotEmpty()) sb.append(" (").append(ps.iframes.take(3).joinToString { Scraper.hostOf(it) }).append(")")
+            sb.append('\n')
+
+            val links = ArrayList<String>()
+            timed(60_000L) {
+                loadLinks(data, false, {}, { links.add(it.name + " [" + it.type + "]") })
+            }
+            if (links.isEmpty()) {
+                sb.append("✗ Oynatma bağlantısı çıkarılamadı\n")
+                ok = false
+            } else {
+                sb.append("✓ ").append(links.size).append(" bağlantı: ").append(links.take(3).joinToString("; ")).append('\n')
+            }
+        } catch (e: Exception) {
+            sb.append("✗ Hata: ").append(e.message ?: e.javaClass.simpleName).append('\n')
+            ok = false
+        }
+        return Pair(ok, sb.toString())
     }
 }
