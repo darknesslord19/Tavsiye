@@ -86,7 +86,7 @@ object SettingsHtml {
     var st = JSON.parse(Android.getState());
 
     var sh = '';
-    if (!st.sources.length) sh = '<div class="empty">Liste yok</div>';
+    if (!st.sources.length) sh = '<div class="empty">Ekstra liste yok (yerleşik liste her zaman açık)</div>';
     st.sources.forEach(function(u, i) {
       sh += '<div class="item"><div class="info"><div class="u" style="font-size:12px">' + esc(u) + '</div></div>' +
             '<button class="del" data-src="' + i + '">Sil</button></div>';
