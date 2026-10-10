@@ -10,7 +10,7 @@ import java.util.concurrent.TimeUnit
 /** Ayarlar ekranındaki test düğmelerinin çalıştırdığı kontroller. Anahtarı ekrana yazmaz. */
 object Diagnostics {
     // Yeni bir sürüm yüklediğini bu etiketten anlarsın. Her değişiklikte güncellenir.
-    const val BUILD = "v10"
+    const val BUILD = "v11"
 
     // Son Sağlayıcı testinin sonucu: script adresi -> link döndürdü mü. "Sadece çalışanları aç" bunu kullanır.
     private val lastResults = java.util.concurrent.ConcurrentHashMap<String, Boolean>()
