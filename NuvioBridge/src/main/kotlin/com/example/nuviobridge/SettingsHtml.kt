@@ -16,11 +16,19 @@ object SettingsHtml {
   input[type=url] { flex:1; padding:12px; border-radius:8px; border:1px solid #333; background:#1e1e1e; color:#eee; font-size:14px; }
   button { padding:12px 16px; border:0; border-radius:8px; background:#6c5ce7; color:#fff; font-size:14px; }
   button.del { background:#c0392b; padding:8px 12px; }
+  button.ghost { background:#2d2d2d; padding:8px 12px; }
   #msg { min-height:18px; font-size:13px; margin-bottom:12px; }
   .ok { color:#2ecc71; } .err { color:#e74c3c; }
-  .card { background:#1e1e1e; border-radius:10px; padding:12px; margin-bottom:8px; display:flex; align-items:center; gap:10px; }
-  .url { flex:1; word-break:break-all; font-size:13px; }
+  .card { background:#1e1e1e; border-radius:10px; padding:12px; margin-bottom:10px; }
+  .top { display:flex; align-items:center; gap:10px; }
+  .info { flex:1; min-width:0; }
+  .title { font-size:16px; font-weight:bold; }
+  .url { font-size:11px; color:#888; word-break:break-all; }
+  .count { font-size:12px; color:#aaa; margin-top:2px; }
+  .provs { margin-top:10px; border-top:1px solid #2d2d2d; padding-top:6px; }
+  .prov { display:flex; align-items:center; gap:10px; padding:6px 2px; font-size:14px; }
   .empty { color:#777; text-align:center; padding:24px 0; }
+  input[type=checkbox] { width:20px; height:20px; }
 </style>
 </head>
 <body>
@@ -35,38 +43,63 @@ object SettingsHtml {
 
 <script>
   var msg = document.getElementById('msg');
+  var open = {};
   function say(text, ok) { msg.textContent = text; msg.className = ok ? 'ok' : 'err'; }
+
+  function el(tag, cls, text) {
+    var e = document.createElement(tag);
+    if (cls) e.className = cls;
+    if (text !== undefined) e.textContent = text;
+    return e;
+  }
 
   function render() {
     var repos = JSON.parse(Android.getRepos());
     var list = document.getElementById('list');
     list.innerHTML = '';
     if (repos.length === 0) {
-      var e = document.createElement('div');
-      e.className = 'empty';
-      e.textContent = 'Henüz repo eklenmedi';
-      list.appendChild(e);
+      list.appendChild(el('div', 'empty', 'Henüz repo eklenmedi'));
       return;
     }
     repos.forEach(function (r) {
-      var card = document.createElement('div');
-      card.className = 'card';
+      var card = el('div', 'card');
+      var top = el('div', 'top');
 
-      var cb = document.createElement('input');
+      var cb = el('input');
       cb.type = 'checkbox';
       cb.checked = r.enabled;
       cb.onchange = function () { Android.setEnabled(r.url, cb.checked); };
 
-      var u = document.createElement('div');
-      u.className = 'url';
-      u.textContent = r.url;
+      var info = el('div', 'info');
+      info.appendChild(el('div', 'title', r.name));
+      info.appendChild(el('div', 'url', r.url));
+      var active = r.providers.filter(function (p) { return p.enabled; }).length;
+      info.appendChild(el('div', 'count',
+        r.providers.length === 0 ? 'Sağlayıcılar yükleniyor...' : (active + ' / ' + r.providers.length + ' sağlayıcı aktif')));
 
-      var del = document.createElement('button');
-      del.className = 'del';
-      del.textContent = 'Sil';
+      var toggle = el('button', 'ghost', open[r.url] ? 'Gizle' : 'Liste');
+      toggle.onclick = function () { open[r.url] = !open[r.url]; render(); };
+
+      var del = el('button', 'del', 'Sil');
       del.onclick = function () { Android.removeRepo(r.url); render(); };
 
-      card.appendChild(cb); card.appendChild(u); card.appendChild(del);
+      top.appendChild(cb); top.appendChild(info); top.appendChild(toggle); top.appendChild(del);
+      card.appendChild(top);
+
+      if (open[r.url]) {
+        var provs = el('div', 'provs');
+        r.providers.forEach(function (p) {
+          var line = el('label', 'prov');
+          var pc = el('input');
+          pc.type = 'checkbox';
+          pc.checked = p.enabled;
+          pc.onchange = function () { Android.setProviderEnabled(r.url, p.file, pc.checked); render(); };
+          line.appendChild(pc);
+          line.appendChild(el('span', '', p.name));
+          provs.appendChild(line);
+        });
+        card.appendChild(provs);
+      }
       list.appendChild(card);
     });
   }
@@ -82,7 +115,9 @@ object SettingsHtml {
     if (ok) document.getElementById('url').value = '';
     render();
   }
+
   render();
+  Android.refresh(); // eski sürümde eklenmiş repoların adını ve sağlayıcı listesini tamamlar
 </script>
 </body>
 </html>
