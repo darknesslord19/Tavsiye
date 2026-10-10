@@ -1,51 +1,27 @@
-# Fullhdfilmizlesene CS3
+# Nuvio Bridge CS3
 
-CloudStream icin CS3 Cikarici uygulamasi ile otomatik uretilen eklenti projesi.
+Nuvio JS provider repolarını CloudStream içinde çalıştıran eklenti projesi.
 
 ## GitHub Actions
 
-Bu repo GitHub'a yuklendiginde `main` veya `master` branch'e yapilan push ile otomatik derlenir.
-Ayrica Actions > Build CloudStream CS3 > Run workflow ile elle baslatilabilir.
+Bu repo GitHub'a yüklendiğinde `main` veya `master` branch'e yapılan push ile otomatik derlenir.
+Ayrıca Actions > Build CloudStream CS3 > Run workflow ile elle başlatılabilir.
 
-Derleme tamamlaninca workflow sayfasindaki **Artifacts** bolumunden `Fullhdfilmizlesene-CS3` paketini indirebilirsin.
-Icinde eklenti icin bir `.cs3` dosyasi bulunur.
+Derleme tamamlanınca workflow sayfasındaki **Artifacts** bölümünden `NuvioBridge-CS3` paketini indirebilirsin.
+İçinde `NuvioBridge.cs3` dosyası bulunur.
 
-## Moduller
+## Kullanım
 
-- `Fullhdfilmizlesene` (com.fullhdfilmizlesene)
+1. `.cs3` dosyasını CloudStream'e yükle.
+2. Ayarlar > Eklentiler > Nuvio Bridge yanındaki dişli simgesine bas.
+3. Nuvio reposunun `manifest.json` adresini ekle.
 
-## Analiz Ozeti
+## Notlar
 
-```
-SİTE: fullhdfilmizlesene.now
+- TMDB API anahtarı `NuvioBridgeProvider.kt` içindeki `TMDB_KEY` alanındadır.
+- Manifest şeması (`scrapers`/`providers`, `filename`) ve provider fonksiyon imzası varsayımdır; gerçek bir repoyla test edilmemiştir.
+- Gerçek provider'lar `cheerio`, `URL` gibi ortam parçaları isteyebilir; `JsRunner.kt` içindeki `PRELUDE` bölümüne eklenmeleri gerekebilir.
 
-✔ Kategori/menü linkleri: 80
-✔ Film kartı seçici: div.fut-box (10 adet)
-✘ Arama: form bulunamadı (varsayılan ?s= kullanıldı)
-✔ Detay sayfası: başlık=h1.blok-baslik açıklama=meta
-✘ Dizi bölümleri: yok (film olarak ayarlandı)
-✔ Oynatıcı: 3 medya, 1 iframe, 0 altyazı
-     iframe: rapidvid.org
-     medya : https://s34.imgz.me/m4/DJ5coJSfpl4lZQV2YyqSDv1RGP4kZQtjpP5RIHSZYxthZwL0YHuRGD/eng-3.vtt
-     medya : https://s34.imgz.me/m9/DJ5coJSfpl4lZQV2YyqSDv1RGP4kZQtjpP5RIHSZYxthZwL0YHuRGD/tur-2-default.vtt
-     medya : https://s34.imgz.me/m5/DJ5coJSfpl4lZQV2YyqSDv1RGP4kZQtjpP5RIHSZYxthZwL0YHuRGD/tur-1.vtt
+## Modüller
 
-GİZLEME / ŞİFRELEME
-· p.a.c.k.e.r yok
-· Base64 katmanı yok
-· AES/CryptoJS yok
-! Cloudflare doğrulaması var (CloudflareKiller eklendi)
-
-API/ajax uçları: 5
-     [POST] https://rapidvid.org/ifr/vod/player-log.php
-     https://www.google-analytics.com/g/collect?v=2&tid=G-ZRR1WHXHVX&gtm=45je6a72v9227274004za208zd9227274004xf1&_p…
-     https://www.google-analytics.com/g/collect?v=2&tid=G-ZRR1WHXHVX&gtm=45je6a72v9227274004za208zd9227274004xf1&_p…
-     https://www.google-analytics.com/g/collect?v=2&tid=G-ZRR1WHXHVX&gtm=45je6a72v9227274004za200zd9227274004xf1&_p…
-     https://www.google.com/g/collect?v=2&tid=G-ZRR1WHXHVX&gtm=45je6a72v9227274004za200zd9227274004xf1&_p=179159251…
-
-══════ YAPILACAKLAR ══════
-Hiç eksik yok. KOD sekmesindeki dosyayı veya PAKET (.zip) çıktısını kullanabilirsin.
-
-Sonraki adım: 📦 PAKET (.zip) → içindekileri GitHub deposuna yükle → Actions sekmesi Fullhdfilmizlesene-CS3 (.cs3) dosyasını üretir.
-
-```
+- `NuvioBridge` (com.example.nuviobridge)
