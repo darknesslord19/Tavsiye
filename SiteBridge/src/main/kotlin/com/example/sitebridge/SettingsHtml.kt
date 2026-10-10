@@ -35,6 +35,8 @@ object SettingsHtml {
   input[type=checkbox] { width:22px; height:22px; flex:none; accent-color:#3b82f6; }
   .empty { color:#6f84b5; text-align:center; padding:18px 0; font-size:13px; }
   details summary { font-size:12.5px; color:#7aa7ff; margin:2px 0 8px; }
+  .st-ok { background:#0f3d2e; color:#34d399; } .st-bad { background:#4a1717; color:#f87171; }
+  pre#log { background:#060a14; border:1px solid #1d2c52; border-radius:12px; padding:10px; font-size:11.5px; color:#9fb6e8; white-space:pre-wrap; max-height:260px; overflow:auto; display:none; margin:10px 0 0; }
   .hint { font-size:11.5px; color:#6f84b5; line-height:1.5; margin-bottom:8px; }
 </style>
 </head>
@@ -70,7 +72,10 @@ object SettingsHtml {
 
   <div class="panel">
     <div class="label">SİTELER</div>
+    <div class="hint">Test: ana sayfa, kategori ve oynatma bağlantısını uçtan uca dener. Sonuç sitenin yanında etiket olarak kalır.</div>
+    <button class="ghost" id="testAll" style="width:100%;margin-bottom:8px">▶ Tüm siteleri test et</button>
     <div id="sites"></div>
+    <pre id="log"></pre>
   </div>
 
 <script>
@@ -98,14 +103,23 @@ object SettingsHtml {
       h += '<div class="item"><input type="checkbox" data-en="' + i + '"' + (s.enabled ? ' checked' : '') + '>' +
            '<div class="info"><div class="nm">' + esc(s.name) +
            '<span class="tag">' + (s.source === 'user' ? 'sen' : 'liste') + '</span>' +
-           (s.rules ? '<span class="tag">kural</span>' : '') + '</div>' +
+           (s.rules ? '<span class="tag">kural</span>' : '') +
+           (s.status ? '<span class="tag ' + (s.status.ok ? 'st-ok' : 'st-bad') + '">' + (s.status.ok ? '✓ çalışıyor' : '✗ ' + esc(s.status.text).substring(0, 60)) + '</span>' : '') + '</div>' +
            '<div class="u">' + esc(s.url) + '</div></div>' +
+           '<button class="ghost" data-test="' + i + '">Test</button>' +
            (s.source === 'user' ? '<button class="del" data-del="' + i + '">Sil</button>' : '') + '</div>';
     });
     document.getElementById('sites').innerHTML = h;
     var cbs = document.querySelectorAll('input[data-en]');
     for (var j = 0; j < cbs.length; j++) {
       cbs[j].onchange = (function(el, idx) { return function() { Android.setEnabled(st.sites[idx].url, el.checked); }; })(cbs[j], +cbs[j].getAttribute('data-en'));
+    }
+    var tests = document.querySelectorAll('button[data-test]');
+    for (var t = 0; t < tests.length; t++) {
+      tests[t].onclick = (function(el, idx) { return function() {
+        el.textContent = '...'; el.disabled = true; showLog('Test ediliyor: ' + st.sites[idx].name + ' (en fazla 1-2 dk)...');
+        Android.testSite(st.sites[idx].url);
+      }; })(tests[t], +tests[t].getAttribute('data-test'));
     }
     var dels = document.querySelectorAll('button[data-del]');
     for (var k = 0; k < dels.length; k++) {
@@ -134,6 +148,14 @@ object SettingsHtml {
     Android.refresh();
   };
   function onRefresh(ok, text) { setMsg('rmsg', ok, text); render(); }
+  function showLog(t) { var l = document.getElementById('log'); l.style.display = 'block'; l.textContent = t; }
+  function onTest(url, ok, text) { showLog((ok ? '✓ ' : '✗ ') + url + '\n\n' + text); render(); }
+  function onTestAllDone() { document.getElementById('testAll').disabled = false; document.getElementById('testAll').textContent = '▶ Tüm siteleri test et'; }
+  document.getElementById('testAll').onclick = function() {
+    this.disabled = true; this.textContent = 'Test ediliyor (birkaç dakika sürebilir)...';
+    showLog('Tüm siteler sırayla test ediliyor...');
+    Android.testAll();
+  };
 
   render();
 </script>
