@@ -67,12 +67,13 @@ Sırayla denenir (bulunan ilk çalışan kaynaklar eklenir):
 3. Her iframe için: CloudStream'in hazır çıkarıcıları → iframe sayfasını tarama (iç içe iframe dahil) → gerçek tarayıcıda ağ dinleme
 4. Hiçbiri olmazsa sayfanın kendisi tarayıcıda açılıp ağ dinlenir
 
-Takılan adımlar 20-25 sn'de bırakılır, tüm akış kilitlenmez.
+Tarayıcı adımında sayfadaki "oynat" düğmeleri otomatik tıklanır. Sayfada çıplak yazılmış `/embed/...` adresleri de iframe sayılır.
+Takılan adımlar 20-35 sn'de bırakılır, tüm akış kilitlenmez.
 
 ## Site testi
 
 Dişlideki ayar ekranında her sitenin yanında **Test** düğmesi ve **Tüm siteleri test et** var. Test ana sayfayı, kategoriyi, ilk içeriği ve oynatma bağlantısını dener,
-raporu alta yazar ve sitenin yanına ✓ / ✗ etiketi koyar. Çalışmayan bir site için raporu gönderirsen neden çalışmadığı hemen görülür.
+raporu alta yazar (sonunda "— oynatma adımları —" bölümü: hangi adımda ne bulundu / nerede takıldı) ve sitenin yanına ✓ / ✗ etiketi koyar. Çalışmayan bir site için raporu gönderirsen neden çalışmadığı hemen görülür.
 
 ## MainActivity ile farklar
 
