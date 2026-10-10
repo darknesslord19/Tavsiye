@@ -38,10 +38,11 @@ object SettingsDialog {
         fun getState(): String {
             val sites = JSONArray()
             SiteStore.allSites().forEach {
-                sites.put(
-                    JSONObject().put("name", it.name).put("url", it.url).put("enabled", it.enabled)
-                        .put("source", it.source).put("rules", it.rules != null)
-                )
+                val st = SiteStore.status(it.url)
+                val o = JSONObject().put("name", it.name).put("url", it.url).put("enabled", it.enabled)
+                    .put("source", it.source).put("rules", it.rules != null)
+                if (st != null) o.put("status", JSONObject().put("ok", st.ok).put("text", st.text).put("ts", st.time))
+                sites.put(o)
             }
             val src = JSONArray()
             SiteStore.sources().forEach { src.put(it) }
@@ -63,6 +64,45 @@ object SettingsDialog {
 
         @JavascriptInterface
         fun removeSource(url: String) = SiteStore.removeSource(url)
+
+        /** Tek siteyi uçtan uca dener; bitince onTest(url, ok, rapor) çağrılır. */
+        @JavascriptInterface
+        fun testSite(url: String) {
+            Thread { runTest(url) }.start()
+        }
+
+        /** Etkin tüm siteleri sırayla dener. */
+        @JavascriptInterface
+        fun testAll() {
+            Thread {
+                SiteStore.enabledSites().forEach { runTest(it.url) }
+                view.post { view.evaluateJavascript("onTestAllDone()", null) }
+            }.start()
+        }
+
+        private fun runTest(url: String) {
+            val site = SiteStore.allSites().firstOrNull { it.url == url }
+            var ok = false
+            var text: String
+            if (site == null) {
+                text = "Site bulunamadı"
+            } else {
+                try {
+                    val r = blocking { SiteProvider(site).diagnose() }
+                    ok = r.first
+                    text = r.second
+                } catch (e: Throwable) {
+                    text = "✗ Test çalışmadı: " + (e.message ?: e.javaClass.simpleName)
+                }
+                val first = text.lines().firstOrNull { it.startsWith("✗") || it.startsWith("✓") } ?: text.lines().firstOrNull().orEmpty()
+                SiteStore.setStatus(url, ok, if (ok) "çalışıyor" else first.removePrefix("✗ "))
+            }
+            view.post {
+                view.evaluateJavascript(
+                    "onTest(" + JSONObject.quote(url) + "," + ok + "," + JSONObject.quote(text) + ")", null
+                )
+            }
+        }
 
         /** Listeleri indirir; bitince sayfadaki onRefresh(ok, mesaj) çağrılır. */
         @JavascriptInterface
