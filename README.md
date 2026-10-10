@@ -68,6 +68,7 @@ Sırayla denenir (bulunan ilk çalışan kaynaklar eklenir):
 4. Hiçbiri olmazsa sayfanın kendisi tarayıcıda açılıp ağ dinlenir
 
 Tarayıcı adımında sayfadaki "oynat" düğmeleri otomatik tıklanır. Sayfada çıplak yazılmış `/embed/...` adresleri de iframe sayılır.
+Bulunan her video adresi oynatıcıya verilmeden önce kısa bir istekle yoklanır; 4xx/5xx veren ya da video yerine HTML dönen adresler atlanır ("Sunucu hatası 2004" önlenir).
 Takılan adımlar 20-35 sn'de bırakılır, tüm akış kilitlenmez.
 
 ## Site testi
@@ -81,7 +82,8 @@ raporu alta yazar (sonunda "— oynatma adımları —" bölümü: hangi adımda
 - "Site Ara" sekmesindeki adresle gezme yerine CloudStream'in arama kutusu kullanılır.
 - MainActivity'deki reklam temizleyen WebView oynatıcı yoktur; video çıkarılamazsa kaynak link vermez.
 - M3U listesi olan siteler kategorili film arşivi olarak çalışır (başlık/afiş `#sb=` parçasında taşınır).
-- 403/503 veren sitelerde CloudStream'in Cloudflare aşıcısı denenir.
+- 403/503 veren sitelerde CloudStream'in Cloudflare aşıcısı denenir (User-Agent'ı aşıcıya bırakır; bir kez geçen site hatırlanır ve sonraki isteklerde baştan aşıcıyla açılır).
+- Yerleşik liste (`DEFAULT_SOURCE`) ayarlarda gösterilmez ve silinemez; kullanıcı yalnızca kendi listelerini görür/siler.
 
 ## Dosyalar
 
