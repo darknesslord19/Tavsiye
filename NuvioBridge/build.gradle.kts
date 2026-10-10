@@ -3,10 +3,6 @@ version = 1
 dependencies {
     // JS motoru: Rhino, Android'de interpreted modda çalışır.
     implementation("org.mozilla:rhino:1.7.15")
-
-    // Ayarlar ekranı (DialogFragment + WebView) için. Uygulamada zaten var, pakete gömülmez.
-    compileOnly("androidx.appcompat:appcompat:1.7.0")
-    compileOnly("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.8.1")
 }
 
 cloudstream {
