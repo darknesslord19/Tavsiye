@@ -36,64 +36,77 @@ data class PlayerSrc(val video: String?, val iframes: List<String>, val videos: 
  */
 object Scraper {
 
+    /** Derlenemeyen regex kalıpları (Android'in regex motoru bazı kalıpları reddedebilir). Test raporunda gösterilir. */
+    val patternErrors = java.util.concurrent.CopyOnWriteArrayList<String>()
+
+    /** Kalıp derlenemezse tüm eklentiyi çökertmek yerine hiçbir şeyle eşleşmeyen kalıp döndürür. */
+    private fun rx(p: String, flags: Int = 0): Pattern =
+        try {
+            Pattern.compile(p, flags)
+        } catch (e: Exception) {
+            patternErrors.add(p.take(40) + " → " + (e.message ?: e.javaClass.simpleName).take(60))
+            Pattern.compile("(?!)")
+        }
+
+
     // ---------- Önbellekli regex'ler (MainActivity ile birebir) ----------
-    private val A_TAG = Pattern.compile("(<a\\s[^>]*>)(.*?)</a>", Pattern.DOTALL or Pattern.CASE_INSENSITIVE)
-    private val IMG_TAG = Pattern.compile("<img\\s[^>]*>", Pattern.DOTALL or Pattern.CASE_INSENSITIVE)
-    private val CLEAN_TAGS = Pattern.compile("(?s)<[^>]+>")
-    private val WS = Pattern.compile("\\s+")
-    private val BG_URL = Pattern.compile(
+    private val A_TAG = rx("(<a\\s[^>]*>)(.*?)</a>", Pattern.DOTALL or Pattern.CASE_INSENSITIVE)
+    private val IMG_TAG = rx("<img\\s[^>]*>", Pattern.DOTALL or Pattern.CASE_INSENSITIVE)
+    private val CLEAN_TAGS = rx("(?s)<[^>]+>")
+    private val WS = rx("\\s+")
+    private val BG_URL = rx(
         "background(?:-image)?\\s*:\\s*url\\s*\\(\\s*[\\\"']?([^\\\"')]+)", Pattern.CASE_INSENSITIVE
     )
-    private val H_TAG = Pattern.compile("<h[1-4][^>]*>(.*?)</h[1-4]>", Pattern.DOTALL or Pattern.CASE_INSENSITIVE)
-    private val FILM_PATH = Pattern.compile(".*?/film-[^/]+.*")
-    private val OPT_TAG = Pattern.compile(
+    private val H_TAG = rx("<h[1-4][^>]*>(.*?)</h[1-4]>", Pattern.DOTALL or Pattern.CASE_INSENSITIVE)
+    private val FILM_PATH = rx(".*?/film-[^/]+.*")
+    private val OPT_TAG = rx(
         "<option[^>]*value\\s*=\\s*[\"']([^\"']+)[\"'][^>]*>(.*?)</option>",
         Pattern.DOTALL or Pattern.CASE_INSENSITIVE
     )
-    private val NAV_BLOCK = Pattern.compile(
+    private val NAV_BLOCK = rx(
         "<(?:nav|ul|div)[^>]*(?:class|id)\\s*=\\s*[\"'][^\"']*" +
             "(?:menu|nav|genre|categor|kategori|tur)[^\"']*[\"'][^>]*>",
         Pattern.CASE_INSENSITIVE
     )
-    private val CAT_PATH = Pattern.compile(
+    private val CAT_PATH = rx(
         "(?i).*/(?:kategori|kategoriler|category|categories|genre|genres|tur|turler|film-turu|film-turleri|kanal|kanallar|tv|tv-kanallari|canli-tv|canli-yayin|canli)(?:/|$).*"
     )
-    private val LOOSE_EXT = Pattern.compile("(?i).*\\.(jpg|jpeg|png|gif|css|js|php|xml|txt|pdf)$")
-    private val FULLHD_CAT = Pattern.compile(
+    private val LOOSE_EXT = rx("(?i).*\\.(jpg|jpeg|png|gif|css|js|php|xml|txt|pdf)$")
+    private val FULLHD_CAT = rx(
         "https?://[^/]*fullhdfilmizlesene\\.now/filmizle/[^/?#]+/?(?:[?#].*)?"
     )
-    private val LINK_NEXT = Pattern.compile("<link[^>]+rel=[\"']next[\"'][^>]*>", Pattern.CASE_INSENSITIVE)
-    private val NEXT_CLS = Pattern.compile(".*\\bnext\\b.*")
-    private val EP_HREF = Pattern.compile(
+    private val LINK_NEXT = rx("<link[^>]+rel=[\"']next[\"'][^>]*>", Pattern.CASE_INSENSITIVE)
+    private val NEXT_CLS = rx(".*\\bnext\\b.*")
+    private val EP_HREF = rx(
         "href\\s*=\\s*[\\\"']([^\\\"']*(?:\\/)?(?:dublaj\\/|altyazi\\/)?(\\d+)-sezon-(\\d+)-bolum[^\\\"']*\\.html[^\\\"']*)[\\\"']",
         Pattern.CASE_INSENSITIVE
     )
-    private val EP_HREF_X = Pattern.compile(
+    private val EP_HREF_X = rx(
         "href\\s*=\\s*[\"']([^\"']*/(?:bolum|episode|bolumler)/[^\"']*?-(\\d+)x(\\d+)(?:-[^\"'/]*)?/?)[\"']",
         Pattern.CASE_INSENSITIVE
     )
-    private val SERIES_LINK = Pattern.compile(
+    private val SERIES_LINK = rx(
         "href\\s*=\\s*[\"']([^\"']*/(?:series|dizi|diziler)/[^\"'/?#]+/?)[\"']", Pattern.CASE_INSENSITIVE
     )
-    private val EP_TITLE = Pattern.compile(
+    private val EP_TITLE = rx(
         "<(?:span|div|a|h[1-6])[^>]*>(.*?)</(?:span|div|a|h[1-6])>", Pattern.CASE_INSENSITIVE or Pattern.DOTALL
     )
-    private val EP_SEASON_TXT = Pattern.compile(".*\\d+\\. Sezon.*")
-    private val META_DESC = Pattern.compile(
+    private val EP_SEASON_TXT = rx(".*\\d+\\. Sezon.*")
+    private val META_DESC = rx(
         "<meta[^>]+name\\s*=\\s*[\\\"']description[\\\"'][^>]+content\\s*=\\s*[\\\"']([^\\\"']+)",
         Pattern.CASE_INSENSITIVE
     )
-    private val SERIES_PATH = Pattern.compile(
+    private val SERIES_PATH = rx(
         "/([^/]+)/(?:(?:dublaj|altyazi)/)?\\d+-sezon-\\d+-bolum(?:-[^/]+)?\\.html", Pattern.CASE_INSENSITIVE
     )
-    private val META_TAG = Pattern.compile("<meta\\s[^>]*>", Pattern.CASE_INSENSITIVE or Pattern.DOTALL)
-    private val TITLE_TAG = Pattern.compile("<title[^>]*>(.*?)</title>", Pattern.CASE_INSENSITIVE or Pattern.DOTALL)
-    private val H1_TAG = Pattern.compile("<h1[^>]*>(.*?)</h1>", Pattern.CASE_INSENSITIVE or Pattern.DOTALL)
-    private val M3U_ATTR = Pattern.compile("([\\w-]+)=\"([^\"]*)\"")
-    private val STREAM_EXT = Pattern.compile(
+    private val META_TAG = rx("<meta\\s[^>]*>", Pattern.CASE_INSENSITIVE or Pattern.DOTALL)
+    private val TITLE_TAG = rx("<title[^>]*>(.*?)</title>", Pattern.CASE_INSENSITIVE or Pattern.DOTALL)
+    private val H1_TAG = rx("<h1[^>]*>(.*?)</h1>", Pattern.CASE_INSENSITIVE or Pattern.DOTALL)
+    private val M3U_ATTR = rx("([\\w-]+)=\"([^\"]*)\"")
+    private val STREAM_EXT = rx(
         "\\.(m3u8|mp4|mkv|ts|avi|mov|webm)(\\?|\\||#|$)", Pattern.CASE_INSENSITIVE
     )
-    private val URL_HINT = Pattern.compile(
+    private val URL_HINT = rx(
         "(/|[?&=])(kategori|kategoriler|category|categories|cat|genre|genres|tur|turu|turler|turleri" +
             "|film-turleri|film-kategori|filmizle|film-izle|filmler|diziler|dizi|yerli-filmler|yabanci-filmler|kanal|kanallar|tv|tv-kanallari|canli-tv|canli-yayin|canli)([/?&=.]|$)",
         Pattern.CASE_INSENSITIVE
@@ -151,7 +164,7 @@ object Scraper {
     private fun attr(tag: String, name: String): String? {
         var p = attrPats[name]
         if (p == null) {
-            p = Pattern.compile("(?<![\\w-])$name\\s*=\\s*[\"']([^\"']*)[\"']", Pattern.CASE_INSENSITIVE)
+            p = rx("(?<![\\w-])$name\\s*=\\s*[\"']([^\"']*)[\"']", Pattern.CASE_INSENSITIVE)
             attrPats[name] = p
         }
         val m = p!!.matcher(tag)
@@ -604,32 +617,32 @@ object Scraper {
     // ====================================================
     // Oynatıcı: sayfadaki video / iframe adayları
     // ====================================================
-    private val PACKED = Pattern.compile(
-        "}\\('(.*?)',\\s*(\\d+),\\s*(\\d+),\\s*'(.*?)'\\.split\\('\\|'\\)", Pattern.DOTALL
+    private val PACKED = rx(
+        "\\}\\('(.*?)',\\s*(\\d+),\\s*(\\d+),\\s*'(.*?)'\\.split\\('\\|'\\)", Pattern.DOTALL
     )
-    private val B64_BLOB = Pattern.compile("[\"'](PGlmcmFt[A-Za-z0-9+/=_-]{16,}|aHR0c[A-Za-z0-9+/=_-]{12,})[\"']")
-    private val ATOB = Pattern.compile("atob\\(\\s*[\"']([A-Za-z0-9+/=_-]{16,})[\"']\\s*\\)")
-    private val VIDEO_ANY = Pattern.compile(
+    private val B64_BLOB = rx("[\"'](PGlmcmFt[A-Za-z0-9+/=_-]{16,}|aHR0c[A-Za-z0-9+/=_-]{12,})[\"']")
+    private val ATOB = rx("atob\\(\\s*[\"']([A-Za-z0-9+/=_-]{16,})[\"']\\s*\\)")
+    private val VIDEO_ANY = rx(
         "https?://[^\"'\\s<>\\\\]+?\\.(?:m3u8|mp4|mpd)(?:\\?[^\"'\\s<>\\\\]*)?", Pattern.CASE_INSENSITIVE
     )
-    private val VIDEO_KEY = Pattern.compile(
+    private val VIDEO_KEY = rx(
         "[\"']?(?:file|src|source|url|video_url|videoUrl|contentUrl|hls|hlsUrl|stream|streamUrl|playlist)[\"']?\\s*[:=]\\s*" +
             "[\"']((?:https?:)?//[^\"'\\s<>]+)[\"']",
         Pattern.CASE_INSENSITIVE
     )
-    private val FRAME_TAG = Pattern.compile("<(?:iframe|embed)\\s[^>]*>", Pattern.CASE_INSENSITIVE or Pattern.DOTALL)
-    private val DATA_EMBED = Pattern.compile(
+    private val FRAME_TAG = rx("<(?:iframe|embed)\\s[^>]*>", Pattern.CASE_INSENSITIVE or Pattern.DOTALL)
+    private val DATA_EMBED = rx(
         "data-(?:embed|iframe|video|player|link|href|url|src|frame)[\\w-]*\\s*=\\s*[\"']((?:https?:)?//[^\"']+)[\"']",
         Pattern.CASE_INSENSITIVE
     )
-    private val JSON_FRAME = Pattern.compile(
+    private val JSON_FRAME = rx(
         "[\"'](?:embed_url|embedUrl|iframe|iframe_url|iframeUrl|player_url|playerUrl|embed)[\"']\\s*[:=]\\s*[\"']((?:https?:)?//[^\"']+)[\"']",
         Pattern.CASE_INSENSITIVE
     )
-    private val OPTION_URL = Pattern.compile(
+    private val OPTION_URL = rx(
         "<option[^>]+value\\s*=\\s*[\"']((?:https?:)?//[^\"']+)[\"']", Pattern.CASE_INSENSITIVE
     )
-    private val ALT_SRC = Pattern.compile(
+    private val ALT_SRC = rx(
         "href\\s*=\\s*[\"']([^\"']*[?&](?:kaynak|source|player|alternatif|alt|part|server|sunucu|sid)=[^\"']*)[\"']",
         Pattern.CASE_INSENSITIVE
     )
@@ -646,7 +659,7 @@ object Scraper {
         "doubleclick", "googlesyndication", "/ads/", "adserver", "preroll", "imasdk", "/banner", "analytics",
         "facebook.com", "googletagmanager"
     )
-    private val ASSET_EXT = Pattern.compile("(?i)\\.(?:jpe?g|png|gif|webp|svg|css|js|ico|woff2?|ttf)(?:\\?.*)?$")
+    private val ASSET_EXT = rx("(?i)\\.(?:jpe?g|png|gif|webp|svg|css|js|ico|woff2?|ttf)(?:\\?.*)?$")
 
     // Dean Edwards "packer" ile sıkıştırılmış JS'in açılması
     private fun digit(c: Char): Int = when (c) {
@@ -807,7 +820,7 @@ object Scraper {
                 val d = doc(html, pageUrl)
                 var rv = extract(d, pl.optString("video", ""))
                 if (rv == null && pl.optString("videoRegex", "").isNotEmpty()) {
-                    val mm = Pattern.compile(pl.optString("videoRegex"), Pattern.DOTALL).matcher(exp)
+                    val mm = rx(pl.optString("videoRegex"), Pattern.DOTALL).matcher(exp)
                     if (mm.find()) rv = if (mm.groupCount() >= 1) mm.group(1) else mm.group()
                 }
                 if (rv != null) rv = resolve(pageUrl, rv)
