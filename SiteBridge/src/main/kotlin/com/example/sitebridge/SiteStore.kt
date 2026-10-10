@@ -88,16 +88,20 @@ object SiteStore {
 
     fun enabledSites(): List<SiteInfo> = allSites().filter { it.enabled }
 
-    fun sources(): List<String> {
-        val raw = prefs()?.getString(K_SOURCES, null)
-        if (raw == null) return listOf(DEFAULT_SOURCE)
+    /** Kullanıcının eklediği listeler (varsayılan liste burada yoktur, ayarlarda da gösterilmez). */
+    fun userSources(): List<String> {
+        val raw = prefs()?.getString(K_SOURCES, null) ?: return emptyList()
         val a = try {
             JSONArray(raw)
         } catch (e: Exception) {
             JSONArray()
         }
-        return (0 until a.length()).map { a.optString(it) }.filter { it.isNotBlank() }
+        return (0 until a.length()).map { a.optString(it) }
+            .filter { it.isNotBlank() && normKey(it) != normKey(DEFAULT_SOURCE) }
     }
+
+    /** Taranan tüm listeler: varsayılan liste her zaman başta, silinemez. */
+    fun sources(): List<String> = listOf(DEFAULT_SOURCE) + userSources()
 
     // ---------- Kayıt yazma ----------
     private fun fixUrl(raw: String): String? {
@@ -150,15 +154,16 @@ object SiteStore {
 
     fun addSource(raw: String): String? {
         val u = fixUrl(raw) ?: return "Geçerli bir liste adresi gir"
-        val list = sources().toMutableList()
-        if (list.any { normKey(it) == normKey(u) }) return "Bu liste zaten ekli"
+        val list = userSources().toMutableList()
+        if (normKey(u) == normKey(DEFAULT_SOURCE) || list.any { normKey(it) == normKey(u) }) return "Bu liste zaten ekli"
         list.add(u)
         prefs()?.edit()?.putString(K_SOURCES, JSONArray(list).toString())?.apply()
         return null
     }
 
     fun removeSource(url: String) {
-        val list = sources().filterNot { normKey(it) == normKey(url) }
+        if (normKey(url) == normKey(DEFAULT_SOURCE)) return
+        val list = userSources().filterNot { normKey(it) == normKey(url) }
         prefs()?.edit()?.putString(K_SOURCES, JSONArray(list).toString())?.apply()
     }
 
