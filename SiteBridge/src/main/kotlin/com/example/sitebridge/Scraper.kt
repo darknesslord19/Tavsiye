@@ -646,6 +646,10 @@ object Scraper {
         "href\\s*=\\s*[\"']([^\"']*[?&](?:kaynak|source|player|alternatif|alt|part|server|sunucu|sid)=[^\"']*)[\"']",
         Pattern.CASE_INSENSITIVE
     )
+    private val EMBED_URL = rx(
+        "(?:https?:)?//[A-Za-z0-9.-]+\\.[A-Za-z]{2,}(?::\\d+)?/(?:embed|embed-[\\w-]+|player|iframe|e|v|f|play|watch|video|videos|stream|vid)/[^\"'\\s<>\\\\)]+",
+        Pattern.CASE_INSENSITIVE
+    )
     private val FRAME_HINTS = arrayOf(
         "embed", "player", "/e/", "/v/", "iframe", "vid", "stream", "play", "watch", "rapid", "dood", "mixdrop",
         "moly", "filemoon", "uqload", "streamtape", "upstream", "sibnet", "ok.ru", "vk.com", "fembed", "voe",
@@ -793,6 +797,18 @@ object Scraper {
             val v = om.group(1)!!
             val l = v.lowercase()
             if (FRAME_HINTS.any { l.contains(it) }) add(v)
+        }
+        // Yedek: sayfada iframe etiketi olmasa da düz metin / script içinde geçen gömme adresleri
+        val em = EMBED_URL.matcher(exp)
+        var extra = 0
+        while (em.find() && extra < 6) {
+            val full = resolve(pageUrl, em.group()) ?: continue
+            if (out.contains(full) || full == pageUrl || !goodFrame(full)) continue
+            val l = full.lowercase()
+            val sameHost = hostOf(full) == hostOf(pageUrl)
+            if (sameHost && !(l.contains("/embed") || l.contains("/player") || l.contains("/iframe"))) continue
+            out.add(full)
+            extra++
         }
         return ArrayList(out)
     }
