@@ -12,8 +12,12 @@ import java.util.concurrent.ExecutorCompletionService
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
 
-class NuvioBridgeProvider : MainAPI() {
-    override var name = "Nuvio Bridge"
+/**
+ * only == null: tüm etkin sağlayıcılardan link toplayan genel kaynak ("Nuvio Bridge").
+ * only != null: yalnızca o sağlayıcıyı çalıştıran, kendi adıyla görünen kaynak.
+ */
+class NuvioBridgeProvider(private val only: ScriptRef? = null) : MainAPI() {
+    override var name = if (only != null) only.provider + " · " + only.repo else "Nuvio Bridge"
     override var mainUrl = "https://www.themoviedb.org"
     override var lang = "tr"
     override val hasMainPage = true
@@ -157,7 +161,7 @@ class NuvioBridgeProvider : MainAPI() {
         val season = s.toInt().takeIf { type == "tv" }
         val episode = e.toInt().takeIf { type == "tv" }
 
-        val scripts = RepoStore.enabledScripts()
+        val scripts = RepoStore.enabledScripts().filter { only == null || it.url == only.url }
         if (scripts.isEmpty()) return false
 
         val pool = Executors.newFixedThreadPool(minOf(MAX_PARALLEL, scripts.size))
