@@ -51,14 +51,14 @@ object SettingsDialog {
         @JavascriptInterface
         fun addList(name: String, url: String): String {
             val err = IptvStore.add(name, url)
-            if (err == null) warm(IptvStore.fixUrl(url) ?: url)
+            if (err == null) warm(IptvStore.fixUrl(url) ?: url, name.trim())
             return err ?: ""
         }
 
         @JavascriptInterface
         fun updateList(id: String, name: String, url: String): String {
             val err = IptvStore.update(id, name, url)
-            if (err == null) warm(IptvStore.fixUrl(url) ?: url)
+            if (err == null) warm(IptvStore.fixUrl(url) ?: url, name.trim())
             return err ?: ""
         }
 
@@ -68,8 +68,8 @@ object SettingsDialog {
         @JavascriptInterface
         fun removeList(id: String) = IptvStore.remove(id)
 
-        private fun warm(url: String) {
-            Thread { runCatching { blocking { Net.channels(url, true) } } }.start()
+        private fun warm(url: String, name: String) {
+            Thread { runCatching { blocking { Net.channels(url, true, name) } } }.start()
         }
 
         /** Listeyi indirip kanal/grup sayısını bulur; bitince onTest(id, ok, metin) çağrılır. */
@@ -79,16 +79,48 @@ object SettingsDialog {
                 val l = IptvStore.all().firstOrNull { it.id == id }
                 var ok = false
                 val text = if (l == null) "Liste bulunamadı" else try {
-                    val ch = blocking { Net.channels(l.url, true) }
+                    val ch = blocking { Net.channels(l.url, true, l.name) }
                     ok = true
-                    val nf = String.format(Locale("tr"), "%,d", ch.size)
-                    nf + " kanal · " + ch.map { it.group }.toSet().size + " grup"
+                    if (ch.size == 1 && ch[0].hls) "Tek canlı yayın (m3u8)" else
+                        String.format(Locale("tr"), "%,d", ch.size) + " kanal · " + ch.map { it.group }.toSet().size + " grup"
                 } catch (e: Throwable) {
                     (e.message ?: e.javaClass.simpleName).take(90)
                 }
                 if (l != null) IptvStore.setStatus(id, Status(ok, text, System.currentTimeMillis()))
                 view.post { view.evaluateJavascript("onTest(" + JSONObject.quote(id) + ")", null) }
             }.start()
+        }
+
+        private fun urlOf(id: String): String? = IptvStore.all().firstOrNull { it.id == id }?.url
+
+        /** [{n, c, h}] : kategori adı, kanal sayısı, gizli mi. Henüz indirilmediyse boş dizi. */
+        @JavascriptInterface
+        fun getGroups(id: String): String {
+            val u = urlOf(id) ?: return "[]"
+            val hid = IptvStore.hidden(u)
+            val a = JSONArray()
+            IptvStore.groupCounts(u).forEach { a.put(JSONObject().put("n", it.first).put("c", it.second).put("h", it.first in hid)) }
+            return a.toString()
+        }
+
+        /** Kategoriler bilinmiyorsa listeyi indirir; bitince onGroups(id) çağrılır. */
+        @JavascriptInterface
+        fun fetchGroups(id: String) {
+            Thread {
+                val l = IptvStore.all().firstOrNull { it.id == id }
+                if (l != null) runCatching { blocking { Net.channels(l.url, false, l.name) } }
+                view.post { view.evaluateJavascript("onGroups(" + JSONObject.quote(id) + ")", null) }
+            }.start()
+        }
+
+        @JavascriptInterface
+        fun setGroupHidden(id: String, name: String, hidden: Boolean) {
+            urlOf(id)?.let { IptvStore.setGroupHidden(it, name, hidden) }
+        }
+
+        @JavascriptInterface
+        fun setAllGroupsHidden(id: String, hidden: Boolean) {
+            urlOf(id)?.let { IptvStore.setAllGroupsHidden(it, hidden) }
         }
 
         /** Yönetici listesini GitHub'dan yeniler; bitince onRefresh(ok, metin) çağrılır. */
