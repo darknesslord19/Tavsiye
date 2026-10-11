@@ -59,9 +59,8 @@ object SettingsHtml {
   .msg.err { color:var(--red); } .msg.ok { color:var(--ok); }
 
   /* Liste satırları */
-  .rows { background:var(--panel); border:1px solid var(--line); border-radius:14px; }
-  .row { padding:14px 16px; border-top:1px solid var(--line); }
-  .row:first-child { border-top:0; }
+  .rows { display:flex; flex-direction:column; gap:14px; }
+  .row { background:var(--panel); border:1px solid var(--line); border-radius:16px; padding:16px; box-shadow:0 1px 0 rgba(255,255,255,.03) inset; }
   .top { display:flex; gap:11px; align-items:flex-start; }
   .dot { width:9px; height:9px; border-radius:50%; background:var(--dim); margin-top:7px; flex:none; }
   .dot.ok { background:var(--ok); } .dot.bad { background:var(--red); } .dot.run { background:var(--amber); }
@@ -76,7 +75,7 @@ object SettingsHtml {
   .tools button.danger { color:var(--red); border-color:rgba(234,106,95,.35); }
   .tools button.danger.solid { background:var(--red); color:#2A0A07; border-color:var(--red); }
   .ask { font-size:13.5px; color:var(--mute); margin-right:2px; }
-  .empty { padding:26px 18px; text-align:center; color:var(--mute); font-size:14px; }
+  .empty { background:var(--panel); border:1px dashed var(--line); border-radius:16px; padding:26px 18px; text-align:center; color:var(--mute); font-size:14px; }
 
   /* Aktif / pasif: tek düğme, iki durum */
   .tools button.sw { display:inline-flex; align-items:center; gap:8px; border-color:rgba(76,195,138,.45); color:var(--ok); }
@@ -84,6 +83,26 @@ object SettingsHtml {
   .tools button.sw.off { border-color:var(--line); color:var(--mute); }
   .tools button.sw.off i { background:var(--dim); }
   .row.off .name, .row.off .url { opacity:.5; }
+
+
+  /* Kategoriler: göz ikonuyla göster / gizle */
+  .cats { margin:14px 0 0; border-top:1px solid var(--line); padding-top:10px; }
+  .cats .bar { display:block; margin-bottom:8px; color:var(--mute); font-size:13px; }
+  .cats .bar span:last-child { display:flex; gap:8px; margin-top:8px; }
+  .cats .bar button { min-height:34px; padding:0 12px; font-size:12.5px; background:transparent; }
+  .cat { display:flex; align-items:center; gap:12px; width:100%; min-height:44px; padding:0 4px; border:0; border-radius:10px;
+         background:transparent; text-align:left; font-weight:500; font-size:14.5px; color:var(--text); }
+  .cat:active { background:var(--raise); }
+  .cat svg { width:20px; height:20px; color:var(--accent); }
+  .cat .n { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .cat .c { color:var(--dim); font-size:12.5px; font-weight:500; }
+  .cat.hid { color:var(--dim); }
+  .cat.hid svg { color:var(--dim); }
+  .cat.hid .n { text-decoration:line-through; }
+  .cats .note { color:var(--mute); font-size:13px; padding:8px 4px; }
+  .tools button.cb { display:inline-flex; align-items:center; gap:6px; }
+  .tools button.cb svg { width:15px; height:15px; transition:transform .15s; }
+  .tools button.cb.open svg { transform:rotate(180deg); }
 
   /* Alt sekme çubuğu */
   nav { position:fixed; left:0; right:0; bottom:0; display:flex; background:var(--panel); border-top:1px solid var(--line);
@@ -135,7 +154,7 @@ object SettingsHtml {
       <h2>Yönetici listeleri <span class="count" id="acount"></span></h2>
       <button id="refresh" style="flex:none">Yenile</button>
     </div>
-    <p class="sub">GitHub'dan gelir. Silinemez ve düzenlenemez; istersen pasif yapabilirsin.</p>
+    <p class="sub">Silinemez ve düzenlenemez; istersen pasif yapabilirsin.</p>
     <div class="rows" id="admin"></div>
     <div class="msg" id="rmsg" role="status"></div>
   </div>
@@ -161,6 +180,35 @@ object SettingsHtml {
   function setMsg(el, kind, text) { var e = byId(el); e.className = 'msg ' + kind; e.textContent = text; }
   function showNotice() { byId('notice').className = 'notice on'; }
 
+  var cats = {};   // id -> { open, loading, items }
+  var EYE = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>';
+  var EYE_OFF = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17.9 17.9A10.9 10.9 0 0 1 12 19C5.6 19 2 12 2 12a18.5 18.5 0 0 1 5.1-5.9M9.9 4.2A10.4 10.4 0 0 1 12 4c6.4 0 10 7 10 7a18.6 18.6 0 0 1-2.2 3.2M14.1 14.1a3 3 0 1 1-4.2-4.2"/><path d="M1 1l22 22"/></svg>';
+  var CHEV = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>';
+
+  function catsHtml(l) {
+    var c = cats[l.id];
+    if (!c || !c.open) return '';
+    var h = '<div class="cats">';
+    if (c.loading) return h + '<div class="note">Kategoriler yükleniyor...</div></div>';
+    if (!c.items.length) return h + '<div class="note">Kategori bulunamadı. "Test et"e basıp listenin açılıp açılmadığına bak.</div></div>';
+    var hiddenN = c.items.filter(function(x) { return x.h; }).length;
+    h += '<div class="bar"><span>' + (c.items.length - hiddenN) + ' görünür, ' + hiddenN + ' gizli</span><span>' +
+         '<button data-act="cat-all" data-id="' + esc(l.id) + '" data-v="0">Hepsini göster</button> ' +
+         '<button data-act="cat-all" data-id="' + esc(l.id) + '" data-v="1">Hepsini gizle</button></span></div>';
+    c.items.forEach(function(g, i) {
+      h += '<button class="cat' + (g.h ? ' hid' : '') + '" data-act="cat" data-id="' + esc(l.id) + '" data-gi="' + i + '" aria-pressed="' + (!g.h) + '">' +
+           (g.h ? EYE_OFF : EYE) + '<span class="n">' + esc(g.n) + '</span><span class="c">' + (g.c || '') + '</span></button>';
+    });
+    return h + '</div>';
+  }
+
+  function loadCats(id) {
+    var items = JSON.parse(Android.getGroups(id));
+    cats[id] = cats[id] || { open: true };
+    cats[id].items = items; cats[id].loading = false;
+    return items.length;
+  }
+
   function stateOf(l) {
     if (running[l.id]) return { cls: 'run', line: 'Test ediliyor...', t: '' };
     if (!l.status) return { cls: '', line: 'Henüz test edilmedi', t: '' };
@@ -185,7 +233,8 @@ object SettingsHtml {
              '<button class="danger" data-act="del" data-id="' + esc(l.id) + '">Sil</button>';
       }
     }
-    return h + '</div></div>';
+    h += '<button class="cb' + (cats[l.id] && cats[l.id].open ? ' open' : '') + '" data-act="cats" data-id="' + esc(l.id) + '">Kategoriler ' + CHEV + '</button>';
+    return h + '</div>' + catsHtml(l) + '</div>';
   }
 
   function activeCount(a) { return a.filter(function(x) { return x.enabled; }).length; }
@@ -216,7 +265,7 @@ object SettingsHtml {
     byId('t-user').className = t === 'user' ? 'on' : '';
     byId('t-admin').className = t === 'admin' ? 'on' : '';
     byId('sub').textContent = t === 'user' ? "Kaydettiğin her M3U / M3U8 linki CloudStream'de ayrı bir kaynak olarak görünür."
-                                            : "Yönetici tarafından GitHub'dan gelen listeler.";
+                                            : "Yönetici tarafından eklenen listeler.";
     window.scrollTo(0, 0);
   }
   byId('openForm').onclick = function() { setMsg('msg', '', ''); openForm(true); byId('fname').focus(); };
@@ -244,6 +293,22 @@ object SettingsHtml {
       var cur = all.filter(function(x) { return x.id === id; })[0];
       if (cur) { Android.setEnabled(id, !cur.enabled); showNotice(); load(); }
     }
+    else if (act === 'cats') {
+      var cc = cats[id];
+      if (cc && cc.open) { cc.open = false; render(); return; }
+      cats[id] = { open: true, loading: false, items: [] };
+      if (loadCats(id) === 0) { cats[id].loading = true; Android.fetchGroups(id); }
+      render();
+    }
+    else if (act === 'cat') {
+      var g = cats[id].items[+b.getAttribute('data-gi')];
+      g.h = !g.h; Android.setGroupHidden(id, g.n, g.h); showNotice(); render();
+    }
+    else if (act === 'cat-all') {
+      var hide = b.getAttribute('data-v') === '1';
+      Android.setAllGroupsHidden(id, hide);
+      cats[id].items.forEach(function(x) { x.h = hide; }); showNotice(); render();
+    }
     else if (act === 'test') { running[id] = true; render(); Android.testList(id); }
     else if (act === 'edit') {
       var l = state.user.filter(function(x) { return x.id === id; })[0]; if (!l) return;
@@ -261,7 +326,8 @@ object SettingsHtml {
     }
   });
 
-  function onTest(id) { delete running[id]; load(); }
+  function onTest(id) { delete running[id]; if (cats[id] && cats[id].open) loadCats(id); load(); }
+  function onGroups(id) { if (cats[id]) { loadCats(id); render(); } }
   function onRefresh(ok, text) {
     byId('refresh').disabled = false;
     setMsg('rmsg', ok ? 'ok' : 'err', text);
