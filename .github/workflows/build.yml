@@ -1,54 +1,38 @@
-name: Derle (.cs3)
+name: Build CloudStream CS3
 
 on:
   push:
-    branches: [main, master]
-    paths-ignore: ['*.md']
+    branches: [ main, master ]
   workflow_dispatch:
-
-concurrency:
-  group: build
-  cancel-in-progress: true
-
-permissions:
-  contents: write
 
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v4
 
-      - uses: actions/setup-java@v4
+      - name: Setup Java 17
+        uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: 17
+          java-version: '17'
+          cache: gradle
 
-      - uses: android-actions/setup-android@v3
-
-      - name: Eklentiyi derle
-        run: |
-          chmod +x gradlew
-          ./gradlew make makePluginsJson --stacktrace
-
-      - name: Çıktıları topla
-        run: |
-          mkdir -p out
-          cp IPTVProvider/build/*.cs3 out/
-          cp build/plugins.json out/
-          printf '{"name":"Darknes Lord","description":"Darknes Lord IPTV","manifestVersion":1,"pluginLists":["https://raw.githubusercontent.com/%s/builds/plugins.json"]}\n' "$GITHUB_REPOSITORY" > out/repo.json
-          ls -la out
-
-      # Telefonuna doğrudan indirmek için
-      - uses: actions/upload-artifact@v4
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
         with:
-          name: IPTVProvider-cs3
-          path: out/IPTVProvider.cs3
+          gradle-version: '8.12'
 
-      # CloudStream'e depo (repository) olarak eklemek için "builds" dalına yayınlar
-      - uses: JamesIves/github-pages-deploy-action@v4
+      - name: Build CS3
+        run: gradle make --stacktrace
+
+      - name: Show generated CS3
+        run: find . -type f -name '*.cs3' -print
+
+      - name: Upload CS3
+        uses: actions/upload-artifact@v4
         with:
-          branch: builds
-          folder: out
-          clean: true
-          single-commit: true
+          name: DarknesLordIPTV-CS3
+          path: '**/*.cs3'
+          if-no-files-found: error
