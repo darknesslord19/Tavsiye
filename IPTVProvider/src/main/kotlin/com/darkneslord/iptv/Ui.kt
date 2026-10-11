@@ -51,7 +51,7 @@ fun rippleOval(ctx: Context): RippleDrawable {
     return RippleDrawable(ColorStateList.valueOf(withAlpha(Color.WHITE, 40)), null, mask)
 }
 
-enum class IconKind { EYE, EYE_OFF, EDIT, TRASH, REFRESH, CHEVRON, PLUS, CLOSE, CHECK }
+enum class IconKind { EYE, EYE_OFF, EDIT, TRASH, REFRESH, CHEVRON, PLUS, CLOSE, CHECK, USER, SHIELD }
 
 /** 24x24 ızgarada çizilen çizgi-ikonlar (kaynak dosyası gerekmez). */
 class IconView(ctx: Context, var kind: IconKind, var tint: Int) : View(ctx) {
@@ -122,6 +122,20 @@ class IconView(ctx: Context, var kind: IconKind, var tint: Int) : View(ctx) {
             IconKind.CLOSE -> {
                 c.drawLine(6f, 6f, 18f, 18f, p)
                 c.drawLine(18f, 6f, 6f, 18f, p)
+            }
+            IconKind.USER -> {
+                c.drawCircle(12f, 8f, 4f, p)
+                c.drawPath(Path().apply {
+                    moveTo(4f, 20.5f); cubicTo(4f, 16f, 8f, 14f, 12f, 14f); cubicTo(16f, 14f, 20f, 16f, 20f, 20.5f)
+                }, p)
+            }
+            IconKind.SHIELD -> {
+                c.drawPath(Path().apply {
+                    moveTo(12f, 3f); lineTo(20f, 6f); lineTo(20f, 12f)
+                    cubicTo(20f, 16.5f, 16.5f, 19.5f, 12f, 21f)
+                    cubicTo(7.5f, 19.5f, 4f, 16.5f, 4f, 12f); lineTo(4f, 6f); close()
+                }, p)
+                c.drawPath(Path().apply { moveTo(8.5f, 12f); lineTo(11f, 14.5f); lineTo(15.5f, 9.5f) }, p)
             }
             IconKind.CHECK -> c.drawPath(Path().apply { moveTo(5f, 12.5f); lineTo(10f, 17.5f); lineTo(19f, 7f) }, p)
         }
