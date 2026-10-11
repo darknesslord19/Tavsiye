@@ -3,19 +3,16 @@ package com.darkneslord.iptv
 import com.lagradost.cloudstream3.*
 import com.lagradost.cloudstream3.utils.*
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.async
-import kotlinx.coroutines.awaitAll
-import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.withContext
 
-class IPTVProvider : MainAPI() {
+class IPTVProvider(private val entryId: String? = null, displayName: String = "Darknes Lord") : MainAPI() {
     override var mainUrl = "https://darknes.lord"
-    override var name = "Darknes Lord"
+    override var name = displayName
     override val hasMainPage = true
     override var lang = "tr"
     override val supportedTypes = setOf(TvType.Live)
 
-    override val mainPage = mainPageOf("all" to "Darknes Lord")
+    override val mainPage = mainPageOf("all" to displayName)
 
     private companion object {
         const val HELP_URL = "darkneslord://help"
@@ -23,55 +20,48 @@ class IPTVProvider : MainAPI() {
         const val MAX_SEARCH = 250
     }
 
+    private fun entry(): PlaylistEntry? = entryId?.let { Store.find(it) }
+
     private fun toSearch(ch: Channel): SearchResponse =
         newLiveSearchResponse(ch.name, ch.toJson(), TvType.Live) {
             this.posterUrl = ch.logo
         }
 
-    override suspend fun getMainPage(page: Int, request: MainPageRequest): HomePageResponse {
-        val active = Store.all().filter { it.enabled }
+    private fun help(msg: String): HomePageResponse =
+        newHomePageResponse(
+            listOf(HomePageList(name, listOf(newLiveSearchResponse(msg, HELP_URL, TvType.Live)), false)),
+            false,
+        )
 
-        // Listeler paralel yüklenir; çalışmayanlar (null) atlanır.
-        val loaded = coroutineScope {
-            active.map { e -> async(Dispatchers.IO) { e to Repo.get(e) } }.awaitAll()
-        }
+    override suspend fun getMainPage(page: Int, request: MainPageRequest): HomePageResponse {
+        val e = entry()
+        if (e == null) return help("Liste ekle: Eklentiler → Darknes Lord → Ayarlar")
+        if (!e.enabled) return help("Bu liste pasif. Ayarlar'dan aktif edin.")
+
+        val parsed = withContext(Dispatchers.IO) { Repo.get(e) }
+            ?: return help("Liste açılamadı: ${e.lastError ?: "bilinmeyen hata"}")
 
         val rows = ArrayList<HomePageList>()
-        for ((entry, parsed) in loaded) {
-            if (parsed == null) continue
-            for ((group, channels) in parsed.groups) {
-                if (group in entry.hidden) continue // göz ikonu ile gizlenen kategori
-                rows.add(
-                    HomePageList(
-                        "${entry.name} · $group",
-                        channels.take(MAX_PER_ROW).map { toSearch(it) },
-                        true,
-                    )
-                )
-            }
+        for ((group, channels) in parsed.groups) {
+            if (group in e.hidden) continue // göz ikonu ile gizlenen kategori
+            rows.add(HomePageList(group, channels.take(MAX_PER_ROW).map { toSearch(it) }, true))
         }
-
-        if (rows.isEmpty()) {
-            val msg = if (active.isEmpty()) "Liste ekle: Eklentiler → Darknes Lord → Ayarlar"
-            else "Etkin listelerde gösterilecek kanal yok (Ayarlar'dan kontrol edin)"
-            rows.add(HomePageList("Darknes Lord", listOf(newLiveSearchResponse(msg, HELP_URL, TvType.Live)), false))
-        }
+        if (rows.isEmpty()) return help("Gösterilecek kategori yok (hepsi gizli olabilir)")
         return newHomePageResponse(rows, false)
     }
 
     override suspend fun search(query: String): List<SearchResponse> {
         val q = query.trim()
-        if (q.isEmpty()) return emptyList()
+        val e = entry()
+        if (q.isEmpty() || e == null || !e.enabled) return emptyList()
         val results = ArrayList<SearchResponse>()
-        for (entry in Store.all().filter { it.enabled }) {
-            val parsed = withContext(Dispatchers.IO) { Repo.get(entry) } ?: continue
-            for ((group, channels) in parsed.groups) {
-                if (group in entry.hidden) continue
-                for (ch in channels) {
-                    if (ch.name.contains(q, ignoreCase = true)) {
-                        results.add(toSearch(ch))
-                        if (results.size >= MAX_SEARCH) return results
-                    }
+        val parsed = withContext(Dispatchers.IO) { Repo.get(e) } ?: return emptyList()
+        for ((group, channels) in parsed.groups) {
+            if (group in e.hidden) continue
+            for (ch in channels) {
+                if (ch.name.contains(q, ignoreCase = true)) {
+                    results.add(toSearch(ch))
+                    if (results.size >= MAX_SEARCH) return results
                 }
             }
         }
@@ -86,7 +76,7 @@ class IPTVProvider : MainAPI() {
             }
         }
         val ch = Channel.fromJson(url) ?: return null
-        val listName = Store.all().firstOrNull { it.id == ch.playlistId }?.name
+        val listName = Store.find(ch.playlistId)?.name
         return newLiveStreamLoadResponse(ch.name, url, url) {
             this.posterUrl = ch.logo
             this.plot = buildString {
