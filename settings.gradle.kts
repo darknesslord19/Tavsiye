@@ -1,2 +1,2 @@
-rootProject.name = "SiteBridge"
-include("SiteBridge")
+rootProject.name = "IptvBridge"
+include("IptvBridge")
