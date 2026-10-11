@@ -6,15 +6,21 @@ import com.lagradost.cloudstream3.utils.ExtractorLinkType
 import com.lagradost.cloudstream3.utils.Qualities
 import com.lagradost.cloudstream3.utils.newExtractorLink
 
-/** Kullanıcının M3U listelerini CloudStream'de canlı yayın olarak gösteren kaynak. */
-class DarknesLordProvider : MainAPI() {
-    override var name = "Darknes Lord"
+/**
+ * only == null: tüm aktif listeleri tek ana sayfada gösteren genel kaynak ("Darknes Lord").
+ * only != null: yalnızca o listeyi, listenin kendi adıyla gösteren ayrı kaynak.
+ */
+class DarknesLordProvider(
+    private val only: String? = null,
+    displayName: String = "Darknes Lord",
+) : MainAPI() {
+    override var name = displayName
     override var mainUrl = "https://darknes.lord"
     override var lang = "tr"
     override val hasMainPage = true
     override val supportedTypes = setOf(TvType.Live)
 
-    override val mainPage = mainPageOf("all" to "Darknes Lord")
+    override val mainPage = mainPageOf("all" to displayName)
 
     companion object {
         private const val HELP_URL = "darkneslord://help"
@@ -29,7 +35,7 @@ class DarknesLordProvider : MainAPI() {
 
     // ---------- Ana sayfa: aktif listelerin görünür kategorileri ----------
     override suspend fun getMainPage(page: Int, request: MainPageRequest): HomePageResponse {
-        val active = Store.all().filter { it.enabled }
+        val active = Store.all().filter { it.enabled && (only == null || it.id == only) }
 
         // Listeler paralel yüklenir; çalışmayanlar (null) atlanır ve kartta kırmızı görünür.
         val loaded = parallelMap(active) { e -> e to runCatching { Repo.get(e) }.getOrNull() }
@@ -41,7 +47,7 @@ class DarknesLordProvider : MainAPI() {
                 if (group in entry.hidden) continue // göz ikonuyla gizlenen kategori
                 rows.add(
                     HomePageList(
-                        entry.name + " · " + group,
+                        if (only == null) entry.name + " · " + group else group,
                         channels.take(MAX_PER_ROW).map { toSearch(it) },
                         true,
                     )
@@ -50,7 +56,8 @@ class DarknesLordProvider : MainAPI() {
         }
 
         if (rows.isEmpty()) {
-            val msg = if (active.isEmpty()) "Liste ekle: Eklentiler → Darknes Lord → dişli simgesi"
+            val msg = if (active.isEmpty()) (if (only == null) "Liste ekle: Eklentiler → Darknes Lord → dişli simgesi"
+                else "Bu liste silinmiş ya da pasif (dişli simgesinden kontrol edin)")
             else "Aktif listelerde gösterilecek kanal yok (dişli simgesinden kontrol edin)"
             rows.add(HomePageList("Darknes Lord", listOf(newLiveSearchResponse(msg, HELP_URL, TvType.Live)), false))
         }
@@ -62,7 +69,7 @@ class DarknesLordProvider : MainAPI() {
         val q = query.trim()
         if (q.isEmpty()) return emptyList()
         val results = ArrayList<SearchResponse>()
-        for (entry in Store.all().filter { it.enabled }) {
+        for (entry in Store.all().filter { it.enabled && (only == null || it.id == only) }) {
             val parsed = runCatching { Repo.get(entry) }.getOrNull() ?: continue
             for ((group, channels) in parsed.groups) {
                 if (group in entry.hidden) continue
