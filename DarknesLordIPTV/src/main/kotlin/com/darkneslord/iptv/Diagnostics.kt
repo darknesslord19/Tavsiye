@@ -3,7 +3,7 @@ package com.darkneslord.iptv
 /** Ayarlar ekranındaki test düğmesinin çalıştırdığı kontrol. */
 object Diagnostics {
     // Yeni bir sürüm yüklediğini bu etiketten anlarsın. Her değişiklikte güncellenir.
-    const val BUILD = "v1"
+    const val BUILD = "v3"
 
     /** Tüm listeleri (pasif olanlar dahil) yeniden çözer, okur ve durumlarını günceller. Bloklayıcıdır. */
     fun testAll(): String {
