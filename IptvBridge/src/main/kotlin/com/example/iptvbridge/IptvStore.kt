@@ -18,7 +18,7 @@ object IptvStore {
      *   [{"name":"Spor","url":"https://.../spor.m3u"}]   ya da   {"Spor":"https://.../spor.m3u"}   ya da   {"lists":[...]}
      *   ya da doğrudan bir .m3u dosyası (tek liste olarak eklenir)
      */
-    const val ADMIN_SOURCE = "https://raw.githubusercontent.com/KULLANICI/REPO/main/iptv.json"
+    const val ADMIN_SOURCE = "https://darknes-lord-paste-default-rtdb.firebaseio.com/pastes/Cloudstreamtv.json"
     private const val ADMIN_PLACEHOLDER = "KULLANICI/REPO"
 
     private const val PREFS = "iptv_bridge"
@@ -28,6 +28,7 @@ object IptvStore {
     private const val K_GROUPS = "groups"
     private const val K_STATUS = "status"
     private const val K_OFF = "disabled"
+    private const val K_HIDDEN = "hidden_groups"
     private const val REFRESH_MS = 6 * 3600_000L
 
     private var prefs: SharedPreferences? = null
@@ -172,28 +173,68 @@ object IptvStore {
             if (t.startsWith("[")) fromArray(JSONArray(t)) else {
                 val o = JSONObject(t)
                 val arr = o.optJSONArray("lists") ?: o.optJSONArray("playlists") ?: o.optJSONArray("items")
-                if (arr != null) fromArray(arr) else for (k in o.keys()) add(k, o.optString(k))
+                if (arr != null) fromArray(arr) else for (k in o.keys()) {
+                    val v = o.opt(k)
+                    if (v is JSONObject) add(v.optString("name").ifBlank { k }, v.optString("url").ifBlank { v.optString("link") })
+                    else if (v is String) add(k, v)
+                }
             }
         } catch (e: Exception) { /* bozuk JSON: boş döner */ }
         return out.distinctBy { key(it.url) }
     }
 
-    // ---------------------------------------------------------------- ana sayfa grupları
-    fun groups(url: String): List<String> {
+    // ---------------------------------------------------------------- gruplar (kategoriler)
+    /** Listedeki tüm gruplar ve kanal sayıları, kalabalıktan aza. */
+    fun groupCounts(url: String): List<Pair<String, Int>> {
         return try {
             val o = JSONObject(prefs?.getString(K_GROUPS, "{}") ?: "{}")
             val a = o.optJSONArray(key(url)) ?: return emptyList()
-            (0 until a.length()).map { a.optString(it) }.filter { it.isNotBlank() }
+            val out = ArrayList<Pair<String, Int>>()
+            for (i in 0 until a.length()) {
+                val v = a.opt(i)
+                if (v is JSONObject) out.add(v.optString("n") to v.optInt("c"))
+                else if (v is String) out.add(v to 0)   // eski kayıt biçimi
+            }
+            out.filter { it.first.isNotBlank() }
         } catch (e: Exception) { emptyList() }
     }
 
-    fun saveGroups(url: String, groups: List<String>) {
+    fun groups(url: String): List<String> = groupCounts(url).map { it.first }
+
+    fun saveGroups(url: String, groups: List<Pair<String, Int>>) {
         try {
             val o = JSONObject(prefs?.getString(K_GROUPS, "{}") ?: "{}")
-            o.put(key(url), JSONArray(groups))
+            val a = JSONArray()
+            groups.forEach { a.put(JSONObject().put("n", it.first).put("c", it.second)) }
+            o.put(key(url), a)
             prefs?.edit()?.putString(K_GROUPS, o.toString())?.apply()
         } catch (e: Exception) { /* önemsiz */ }
     }
+
+    // ---------------------------------------------------------------- gizlenen kategoriler
+    fun hidden(url: String): Set<String> {
+        return try {
+            val a = JSONObject(prefs?.getString(K_HIDDEN, "{}") ?: "{}").optJSONArray(key(url)) ?: return emptySet()
+            (0 until a.length()).map { a.optString(it) }.toSet()
+        } catch (e: Exception) { emptySet() }
+    }
+
+    private fun saveHidden(url: String, names: Set<String>) {
+        try {
+            val o = JSONObject(prefs?.getString(K_HIDDEN, "{}") ?: "{}")
+            o.put(key(url), JSONArray(names.toList()))
+            prefs?.edit()?.putString(K_HIDDEN, o.toString())?.apply()
+        } catch (e: Exception) { /* önemsiz */ }
+    }
+
+    fun setGroupHidden(url: String, name: String, hide: Boolean) {
+        val s = hidden(url).toMutableSet()
+        if (hide) s.add(name) else s.remove(name)
+        saveHidden(url, s)
+    }
+
+    fun setAllGroupsHidden(url: String, hide: Boolean) =
+        saveHidden(url, if (hide) groups(url).toSet() else emptySet())
 
     // ---------------------------------------------------------------- test sonucu
     fun status(id: String): Status? {
