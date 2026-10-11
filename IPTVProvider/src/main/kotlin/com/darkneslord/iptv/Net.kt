@@ -172,8 +172,9 @@ object PlaylistLoader {
             if (r.ok) return r
             last = r
             val e = r.error.orEmpty()
-            // Ağ düzeyi hatalarda (alan adı yok, bağlanılamadı, zaman aşımı) kimlik değiştirmek işe yaramaz
-            if (e.startsWith("Sunucu bulunamadı") || e.startsWith("Sunucuya bağlanılamadı") || e.startsWith("Sunucu zaman aşımına") || e.startsWith("Geçersiz link")) break
+            // Ağ düzeyi hatalarda kimlik değiştirmek işe yaramaz
+            if (e.startsWith("Sunucu bulunamadı") || e.startsWith("Sunucuya bağlanılamadı") ||
+                e.startsWith("Sunucu zaman aşımına") || e.startsWith("Geçersiz link")) break
         }
         return last!!
     }
@@ -220,7 +221,7 @@ object PlaylistLoader {
         if (depth < 2) {
             val next = META_REFRESH.find(text)?.groupValues?.get(1)?.let { resolveAgainst(f.url, it) }
                 ?: M3U_LINK.find(text)?.value
-            if (next != null && next != f.url) return load(next, depth + 1)
+            if (next != null && next != f.url) return loadOnce(next, ua, depth + 1)
         }
         return fail(f.url, "Bu link geçerli bir M3U/IPTV listesi değil.")
     }
