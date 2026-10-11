@@ -1,28 +1,41 @@
-# Darknes Lord – CloudStream IPTV eklentisi
+# Darknes Lord IPTV CS3
 
-Kendi M3U/IPTV listelerinizi tek yerden yönetin.
+Kendi M3U/IPTV listelerinizi CloudStream içinde yöneten eklenti projesi.
 
-* **İki sayfa:** altta *Kullanıcı* ve *Yönetici* ikonları
-* **Her liste ayrı kaynak:** kaydettiğiniz her liste CloudStream'de ayrı bir kaynak olarak görünür (ekle/aktif/pasif/sil sonrası CloudStream'i kapatıp açın)
-* **Yönetici listeleri:** `ornek/Cloudstreamtv.json` biçiminde, Firebase'den uzaktan gelir; silinemez, yalnızca aktif/pasif yapılır. Adres: `Store.kt` içindeki `AdminSource.URL`
-* **Tek Aktif/Pasif düğmesi** (kartın sağ üstü)
+## GitHub Actions
 
-* Liste kartları: düzenle, sil, yenile (test et)
-* Her listenin kategorileri: göz ikonu ile göster / gizle, arama, "tümünü göster/gizle"
-* Kısaltılmış (bit.ly, tinyurl…) ve yönlendirmeli linkler otomatik çözülür; GitHub `blob`, Gist ve Pastebin linkleri ham adrese çevrilir
-* Link kaydedilmeden önce okunur: çalışmayan / geçersiz link eklenemez
-* Çalışmayan duruma düşen liste kırmızı görünür ve ana sayfada gösterilmez
-* Kesin ölü (404/410, sunucu yok) kanallar oynatılmaya çalışılmaz
+Bu repo GitHub'a yüklendiğinde `main` veya `master` branch'e yapılan push ile otomatik derlenir.
+Ayrıca Actions > Build CloudStream CS3 > Run workflow ile elle başlatılabilir.
 
-## Derleme (bilgisayarsız, GitHub ile)
-1. GitHub'da yeni bir depo açın ve bu klasörün içeriğini yükleyin.
-2. **Actions → Derle (.cs3) → Run workflow**.
-3. Bitince:
-   * **Artifacts → IPTVProvider-cs3** : `.cs3` dosyası, veya
-   * CloudStream → Ayarlar → Eklentiler → **Depo ekle** →  
-     `https://raw.githubusercontent.com/KULLANICI/DEPO/builds/repo.json`  
-     sonra listeden **Darknes Lord**'u indirin.
-4. Eklentiler ekranında Darknes Lord'un yanındaki **dişli** simgesi yönetim panelini açar.
+Derleme tamamlanınca workflow sayfasındaki **Artifacts** bölümünden `DarknesLordIPTV-CS3` paketini indirebilirsin.
+İçinde `DarknesLordIPTV.cs3` dosyası bulunur.
 
-## Yerel derleme
-JDK 17 + Android SDK kurulu olmalı: `./gradlew make` → `IPTVProvider/build/IPTVProvider.cs3`
+## Kullanım
+
+1. `.cs3` dosyasını CloudStream'e yükle.
+2. Ayarlar > Eklentiler > Darknes Lord yanındaki dişli simgesine bas.
+3. **Yeni IPTV listesi ekle** ile M3U linkini yapıştır (kısaltılmış link olabilir).
+
+## Özellikler
+
+- Liste kartları: aktif/pasif anahtarı, yenile (test), düzenle, sil.
+- Her listenin kategorileri: göz ikonuyla göster/gizle, arama, "tümünü göster/gizle".
+- Link kaydedilmeden önce çözülür ve okunur; çalışmayan veya geçersiz link eklenemez.
+- Kısaltılmış (bit.ly, tinyurl…) ve yönlendirmeli linkler otomatik çözülür; HTML ara sayfadaki M3U linki bulunur.
+  GitHub `blob`, Gist ve Pastebin linkleri ham adrese çevrilir.
+- Sonradan çalışmaz hale gelen liste kırmızı görünür ve ana sayfada gösterilmez.
+- Oynatmadan önce yayın linki çözülür; kesin ölü (404/410, sunucu yok) kanallar açılmaz.
+- "Tüm listeleri test et" düğmesi her listenin durumunu raporlar. Sürüm etiketi `Diagnostics.kt` içindeki `BUILD`.
+
+## Notlar
+
+- Ayarlar ekranı XML/androidx kullanmaz: `SettingsDialog.kt` (Dialog + WebView) ve `SettingsHtml.kt` (gömülü HTML).
+- Ağ katmanı (`Net.kt`) yalnızca `java.net` kullanır; yönlendirmeleri elle takip eder.
+- Reklam/captcha gerektiren veya JavaScript ile yönlendiren kısaltıcılar çözülemez.
+- Kanallar tek tek önceden taranmaz; ölü kanal oynatma anında elenir.
+- ClearKey DRM desteği yoktur.
+- Link çözümleme/M3U ayrıştırma kodu JVM'de test edildi; CloudStream'e bağlanan kısım gerçek cihazda denenmedi.
+
+## Modüller
+
+- `DarknesLordIPTV` (com.darkneslord.iptv)
