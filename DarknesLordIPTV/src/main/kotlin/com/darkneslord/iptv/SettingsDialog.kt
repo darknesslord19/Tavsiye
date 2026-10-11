@@ -4,7 +4,9 @@ import android.annotation.SuppressLint
 import android.app.Dialog
 import android.content.ClipboardManager
 import android.content.Context
+import android.content.Intent
 import android.graphics.Color
+import android.net.Uri
 import android.view.WindowManager
 import android.webkit.JavascriptInterface
 import android.webkit.WebView
@@ -61,8 +63,15 @@ object SettingsDialog {
         fun getState(): String {
             val arr = JSONArray()
             Store.all().forEach { arr.put(it.toJson()) }
-            return JSONObject().put("version", Diagnostics.BUILD).put("playlists", arr).toString()
+            return JSONObject()
+                .put("version", Diagnostics.BUILD)
+                .put("split", Store.splitEnabled())
+                .put("playlists", arr)
+                .toString()
         }
+
+        @JavascriptInterface
+        fun setSplit(value: Boolean) = Store.setSplit(value)
 
         @JavascriptInterface
         fun setEnabled(id: String, enabled: Boolean) {
@@ -155,6 +164,36 @@ object SettingsDialog {
             val clip = clipboard?.primaryClip ?: return ""
             if (clip.itemCount == 0) return ""
             return clip.getItemAt(0).coerceToText(context)?.toString() ?: ""
+        }
+
+        /** Durum çubuğu yüksekliği (CSS px). Başlığın çubuğun altında kalmaması için. */
+        @JavascriptInterface
+        fun topInset(): Float = inset("status_bar_height")
+
+        /** Gezinme çubuğu yüksekliği (CSS px). */
+        @JavascriptInterface
+        fun bottomInset(): Float = inset("navigation_bar_height")
+
+        private fun inset(name: String): Float {
+            val res = context.resources
+            val id = res.getIdentifier(name, "dimen", "android")
+            val px = if (id > 0) res.getDimensionPixelSize(id) else 0
+            return px / res.displayMetrics.density
+        }
+
+        /** Yalnızca geliştiricinin Telegram adresini açar. */
+        @JavascriptInterface
+        fun openUrl(url: String) {
+            if (url != "https://t.me/darknes_lord") return
+            view.post {
+                try {
+                    val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url))
+                    intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    context.startActivity(intent)
+                } catch (e: Exception) {
+                    // Telegram/tarayıcı yoksa sessizce geç
+                }
+            }
         }
 
         @JavascriptInterface
