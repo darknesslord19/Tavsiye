@@ -28,6 +28,9 @@ object Store {
     }
 
     fun all(): List<PlaylistEntry> = items.toList()
+    fun users(): List<PlaylistEntry> = items.filter { !it.admin }
+    fun admins(): List<PlaylistEntry> = items.filter { it.admin }
+    fun find(id: String): PlaylistEntry? = items.firstOrNull { it.id == id }
 
     @Synchronized
     fun add(entry: PlaylistEntry) {
@@ -37,9 +40,31 @@ object Store {
 
     @Synchronized
     fun remove(entry: PlaylistEntry) {
+        if (entry.admin) return // yönetici listeleri silinemez
         items.remove(entry)
         Repo.invalidate(entry.id)
         save()
+    }
+
+    /**
+     * Yönetici listelerini uzaktan (Firebase JSON) eşitler. Başarısızsa eldekiler korunur.
+     * Biçim: [{"name":"..","url":".."}, ...]  veya  {"name":"url", ...}. Bloklayıcıdır.
+     */
+    fun syncAdmin(): Boolean {
+        val remote = AdminSource.fetch() ?: return false
+        synchronized(this) {
+            val keep = HashSet<String>()
+            for ((name, url) in remote) {
+                val id = "admin:" + Integer.toHexString(url.lowercase().hashCode())
+                keep.add(id)
+                val old = items.firstOrNull { it.id == id }
+                if (old != null) old.name = name
+                else items.add(PlaylistEntry(id, name, url, enabled = true, admin = true))
+            }
+            items.removeAll { it.admin && it.id !in keep }
+            save()
+        }
+        return true
     }
 
     @Synchronized
@@ -102,5 +127,56 @@ object Repo {
         val parsed = Parsed(LinkedHashMap<String, List<Channel>>(groups), System.currentTimeMillis())
         cache[entry.id] = parsed
         return parsed
+    }
+}
+
+/** Yönetici listesi kaynağı (Firebase). Adres değişirse yalnızca burası güncellenir. */
+object AdminSource {
+    const val URL = "https://darknes-lord-paste-default-rtdb.firebaseio.com/pastes/Cloudstreamtv.json"
+
+    /** (ad, link) çiftleri; erişilemezse null, geçerli ama boşsa boş liste. */
+    fun fetch(): List<Pair<String, String>>? {
+        val f = try {
+            Net.fetchText(URL, timeoutMs = 15000)
+        } catch (e: Exception) {
+            return null
+        }
+        val text = f.text ?: return null
+        if (f.code !in 200..299) return null
+        val out = ArrayList<Pair<String, String>>()
+        try {
+            var node: Any = org.json.JSONTokener(text.trim()).nextValue()
+            // Firebase'e metin olarak yapıştırılmış JSON ("[...]" tırnaklı) olabilir
+            if (node is String) {
+                val t = node.trim()
+                node = if (t.startsWith("[") || t.startsWith("{")) org.json.JSONTokener(t).nextValue() else return out
+            }
+            fun add(name: String?, url: String?, idx: Int) {
+                val u = url?.trim().orEmpty()
+                if (!u.startsWith("http", true)) return
+                out.add((name?.trim().takeUnless { it.isNullOrEmpty() } ?: "Liste ${idx + 1}") to u)
+            }
+            when (node) {
+                is org.json.JSONArray -> for (i in 0 until node.length()) {
+                    val o = node.optJSONObject(i)
+                    if (o != null) add(o.optString("name"), o.optString("url"), i)
+                    else add(null, node.optString(i), i)
+                }
+                is org.json.JSONObject -> {
+                    var i = 0
+                    val keys = node.keys()
+                    while (keys.hasNext()) {
+                        val k = keys.next()
+                        val v = node.opt(k)
+                        if (v is org.json.JSONObject) add(v.optString("name", k), v.optString("url"), i)
+                        else add(k, v?.toString(), i)
+                        i++
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            return null
+        }
+        return out
     }
 }
