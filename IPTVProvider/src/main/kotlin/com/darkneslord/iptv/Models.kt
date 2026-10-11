@@ -62,9 +62,12 @@ class PlaylistEntry(
     var categories: List<CategoryInfo> = emptyList(),
     var lastChecked: Long = 0L,
     var lastError: String? = null,
+    /** Yönetici listesi: uzaktan gelir, silinemez/düzenlenemez; yalnızca açılıp kapatılır. */
+    val admin: Boolean = false,
 ) {
     fun toJson(): JSONObject = JSONObject().apply {
         put("id", id)
+        put("admin", admin)
         put("name", name)
         put("url", url)
         put("resolved", resolvedUrl ?: "")
@@ -102,6 +105,7 @@ class PlaylistEntry(
                 categories = cats,
                 lastChecked = o.optLong("checked"),
                 lastError = o.optString("error").ifBlank { null },
+                admin = o.optBoolean("admin", false),
             )
         }
     }
