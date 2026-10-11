@@ -29,25 +29,53 @@ object Net {
     private class Entry(val time: Long, val list: List<Channel>)
     private val cache = ConcurrentHashMap<String, Entry>()
 
-    /** Listeyi indirir ve ayrıştırır (15 dk bellek önbelleği). Gruplar ana sayfa satırları için kaydedilir. */
-    suspend fun channels(url: String, force: Boolean = false): List<Channel> {
+    private const val BROWSER_UA = "Mozilla/5.0 (Linux; Android 13; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Mobile Safari/537.36"
+    // Bazı sunucular yalnızca oynatıcı UA'sını, bazıları yalnızca tarayıcı UA'sını kabul eder: sırayla denenir.
+    private val AGENTS = listOf(UA, BROWSER_UA, "")
+
+    private fun describe(t: String): String {
+        val head = t.trimStart().take(400)
+        if (head.contains("<html", true) || head.contains("<!doctype", true)) {
+            val title = Regex("<title[^>]*>(.*?)</title>", setOf(RegexOption.IGNORE_CASE, RegexOption.DOT_MATCHES_ALL)).find(t)?.groupValues?.get(1)?.trim()?.take(50)
+            return "liste yerine web sayfası geldi" + (if (title.isNullOrBlank()) "" else ": «$title»")
+        }
+        return "M3U listesi değil: " + head.replace(Regex("\\s+"), " ").take(50)
+    }
+
+    /**
+     * Listeyi indirir ve ayrıştırır (15 dk bellek önbelleği). Gruplar ana sayfa satırları için kaydedilir.
+     * Adres tek bir .m3u8 akışıysa (kanal listesi değil) tek kanallı liste olarak döner.
+     */
+    suspend fun channels(url: String, force: Boolean = false, title: String = ""): List<Channel> {
         val hit = cache[url]
         if (!force && hit != null && System.currentTimeMillis() - hit.time < TTL_MS) return hit.list
 
-        val res = try {
-            app.get(url, headers = mapOf("User-Agent" to UA, "Accept" to "*/*"), timeout = 60L)
-        } catch (e: Exception) {
-            throw ErrorLoadingException(IptvStore.hostOf(url) + " açılamadı (" + (e.message ?: e.javaClass.simpleName).take(70) + ")")
+        var text: String? = null
+        var last = "bilinmeyen hata"
+        for (ua in AGENTS) {
+            try {
+                val h = HashMap<String, String>()
+                h["Accept"] = "*/*"
+                if (ua.isNotEmpty()) h["User-Agent"] = ua
+                val res = app.get(url, headers = h, timeout = 60L)
+                if (res.code !in 200..299) { last = "HTTP " + res.code; continue }
+                val t = res.text
+                if (M3u.looksLikeM3u(t)) { text = t; break }
+                last = describe(t)
+            } catch (e: Exception) {
+                last = (e.message ?: e.javaClass.simpleName).take(70)
+            }
         }
-        if (res.code !in 200..299) throw ErrorLoadingException(IptvStore.hostOf(url) + " açılamadı (HTTP " + res.code + ")")
-        val text = res.text
-        if (!M3u.looksLikeM3u(text)) throw ErrorLoadingException("Bu adres bir M3U / M3U8 listesi değil")
-        val list = M3u.parse(text)
-        if (list.isEmpty()) throw ErrorLoadingException("Listede kanal bulunamadı")
+        if (text == null) throw ErrorLoadingException(IptvStore.hostOf(url) + " açılamadı (" + last + ")")
+
+        val list = if (M3u.isHls(text)) {
+            listOf(Channel(title.ifBlank { IptvStore.hostOf(url) }, url, null, "Canlı", emptyMap(), hls = true))
+        } else M3u.parse(text)
+        if (list.isEmpty()) throw ErrorLoadingException("Listede kanal bulunamadı (#EXTINF satırı yok)")
 
         if (cache.size >= MAX_LISTS) cache.keys.firstOrNull()?.let { cache.remove(it) }
         cache[url] = Entry(System.currentTimeMillis(), list)
-        IptvStore.saveGroups(url, M3u.topGroups(list))
+        IptvStore.saveGroups(url, M3u.groupCounts(list))
         return list
     }
 }
