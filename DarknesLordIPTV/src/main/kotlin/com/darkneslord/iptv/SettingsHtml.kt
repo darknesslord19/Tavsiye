@@ -44,6 +44,15 @@ object SettingsHtml {
     box-shadow:0 8px 22px rgba(225,29,72,.3); }
   .primary:active { opacity:.85; }
 
+  /* Gösterim modu anahtarı */
+  .mode { display:flex; align-items:center; gap:14px; background:var(--card); border:1px solid var(--line);
+    border-radius:18px; padding:14px 16px; margin-bottom:14px; }
+  .mode .t { flex:1; min-width:0; }
+  .mode b { display:block; font-size:14px; }
+  .mode span { display:block; margin-top:5px; font-size:11.5px; line-height:1.45; color:var(--mut); }
+  .mode .tag { display:inline-block; margin-top:8px; font-size:11px; font-weight:700; color:var(--vio);
+    background:rgba(167,139,250,.14); padding:4px 9px; border-radius:9px; }
+
   /* Kart */
   .card { background:var(--card); border:1px solid var(--line); border-radius:22px; padding:16px 8px 8px 16px; margin-bottom:12px; }
   .top { display:flex; align-items:center; gap:12px; padding-right:8px; }
@@ -112,6 +121,24 @@ object SettingsHtml {
   .btn.red { color:#fff; background:var(--bad); }
   .btn[disabled] { opacity:.5; }
 
+  /* Alt bilgi + Telegram */
+  .tg { width:100%; display:flex; align-items:center; justify-content:center; gap:10px; border:0; color:#fff;
+    background:#229ed9; border-radius:16px; padding:13px; font-size:14px; font-weight:700; }
+  .tg:active { opacity:.85; }
+  .foot { text-align:center; margin-top:22px; }
+  .foot p { margin:14px 0 0; font-size:12px; color:var(--mut); }
+  .foot p b { color:var(--text); letter-spacing:.3px; }
+  .about { text-align:center; }
+  .about .logo { margin:2px auto 14px; width:64px; height:64px; border-radius:19px; }
+  .about h2 { font-size:20px; }
+  .about .ver { margin:4px 0 14px; font-size:12px; color:var(--mut); }
+  .about .desc { font-size:13px; line-height:1.55; color:#cfcfdc; margin:0 0 14px; }
+  .about ul { list-style:none; padding:0; margin:0 0 16px; text-align:left; }
+  .about li { position:relative; padding:7px 0 7px 22px; font-size:12.5px; line-height:1.45; color:#cfcfdc; border-top:1px solid var(--line); }
+  .about li::before { content:""; position:absolute; left:4px; top:13px; width:7px; height:7px; border-radius:50%; background:var(--acc); }
+  .about .dev { font-size:12px; color:var(--mut); margin:0 0 14px; }
+  .about .dev b { color:var(--text); }
+  .about .btns { margin-top:10px; }
   .empty { text-align:center; padding:40px 24px; color:var(--mut); font-size:13px; line-height:1.5; }
   .empty .logo { margin:0 auto 16px; opacity:.6; width:72px; height:72px; border-radius:22px; box-shadow:none; }
   .empty b { display:block; color:var(--text); font-size:17px; margin-bottom:6px; }
@@ -131,6 +158,7 @@ object SettingsHtml {
     <h1>Darknes Lord</h1>
     <p id="sub">IPTV yönetim merkezi</p>
   </div>
+  <button class="ibtn" id="aboutBtn"></button>
   <button class="ibtn" id="closeBtn"></button>
 </div>
 
@@ -142,11 +170,25 @@ object SettingsHtml {
 
 <button class="primary" id="addBtn"></button>
 
+<div class="mode">
+  <div class="t">
+    <b>Her listeyi ayrı kaynak olarak göster</b>
+    <span id="modeText"></span>
+    <div class="tag" id="modeTag" style="display:none">Uygulamak için CloudStream'i kapatıp yeniden açın</div>
+  </div>
+  <label class="sw"><input type="checkbox" id="split"><i></i></label>
+</div>
+
 <div id="list"></div>
 
 <div class="tools">
   <button class="ghost" id="testAll">Tüm listeleri test et</button>
   <pre id="diag"></pre>
+</div>
+
+<div class="foot">
+  <button class="tg" id="tgBtn"></button>
+  <p>Geliştirici: <b>Darknes Lord</b></p>
 </div>
 
 <div class="modal" id="modal"><div class="box" id="box"></div></div>
@@ -165,12 +207,15 @@ object SettingsHtml {
     refresh: '<path d="M19.2 9.5A7.2 7.2 0 1 0 19.2 14.5"/><path d="M20.5 4v5.5H15"/>',
     chev: '<path d="M6 9l6 6 6-6"/>',
     plus: '<path d="M12 5v14M5 12h14"/>',
-    close: '<path d="M6 6l12 12M18 6L6 18"/>'
+    close: '<path d="M6 6l12 12M18 6L6 18"/>',
+    info: '<circle cx="12" cy="12" r="9"/><path d="M12 11v5.2"/><path d="M12 7.7v.01"/>'
   };
   function svg(name, size, color) {
     return '<svg viewBox="0 0 24 24" width="' + size + '" height="' + size + '" fill="none" stroke="' + (color || 'currentColor') +
       '" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">' + ICONS[name] + '</svg>';
   }
+  // Telegram kâğıt uçak simgesi
+  var TG = '<svg viewBox="0 0 24 24" width="22" height="22" fill="#fff"><path d="M21.4 4.1 2.9 11.2c-1.3.5-1.2 1.2-.2 1.5l4.7 1.5 1.8 5.5c.2.6.4.8.8.8.5 0 .7-.2 1-.5l2.3-2.2 4.8 3.5c.9.5 1.5.2 1.7-.8l3.2-15c.3-1.3-.5-1.9-1.6-1.4zM8.3 13.6l10.6-6.7c.5-.3 1-.1.6.2l-8.6 7.8-.3 3.6z"/></svg>';
   // Vektör IPTV / medya logosu: TV gövdesi, anten, oynat simgesi
   var LOGO = '<svg viewBox="0 0 24 24" width="32" height="32" fill="none" stroke="#fff" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">' +
     '<rect x="4" y="8" width="16" height="10.5" rx="2.6"/><path d="M8.5 3.8L12 8l3.5-4.2"/>' +
@@ -202,7 +247,17 @@ object SettingsHtml {
     clearTimeout(toastTimer);
     toastTimer = setTimeout(function () { t.style.display = 'none'; }, 2600);
   }
-  function load() { state = JSON.parse(A.getState()); q('sub').textContent = 'IPTV yönetim merkezi · ' + state.version; }
+  function modeText() {
+    q('modeText').textContent = q('split').checked
+      ? 'Açık: her aktif liste kaynak seçicide kendi adıyla ayrı bir kaynak olur.'
+      : 'Kapalı: tüm aktif listeler tek “Darknes Lord” ana sayfasında alt alta sıralanır.';
+  }
+  function load() {
+    state = JSON.parse(A.getState());
+    q('sub').textContent = 'IPTV yönetim merkezi · ' + state.version;
+    q('split').checked = !!state.split;
+    modeText();
+  }
   function find(id) {
     for (var i = 0; i < state.playlists.length; i++) if (state.playlists[i].id === id) return state.playlists[i];
     return null;
@@ -404,6 +459,36 @@ object SettingsHtml {
     showModal(wrap);
   }
 
+  var TG_URL = 'https://t.me/darknes_lord';
+  function about() {
+    var w = el('div', 'about');
+    var lg = el('div', 'logo'); lg.innerHTML = LOGO; w.appendChild(lg);
+    w.appendChild(el('h2', '', 'Darknes Lord'));
+    w.appendChild(el('div', 'ver', 'IPTV yönetim merkezi · ' + state.version));
+    w.appendChild(el('p', 'desc', 'Kendi M3U/IPTV listelerinizi CloudStream içinde tek yerden yönetmenizi sağlayan eklenti.'));
+    var ul = el('ul');
+    ['Listeleri tek dokunuşla aç/kapat, düzenle ve sil',
+     'Her listenin kategorilerini göz ikonuyla göster/gizle',
+     'Kısaltılmış linkler otomatik çözülür, liste okunur',
+     'Çalışmayan linkler kaydedilmez, bozulan liste kırmızı görünür',
+     'Listeleri tek ana sayfada ya da ayrı kaynaklar olarak göster'
+    ].forEach(function (t) { ul.appendChild(el('li', '', t)); });
+    w.appendChild(ul);
+    var dv = el('p', 'dev'); dv.appendChild(document.createTextNode('Geliştirici: ')); dv.appendChild(el('b', '', 'Darknes Lord')); w.appendChild(dv);
+    var tg = el('button', 'tg'); tg.innerHTML = TG + '<span>Telegram</span>'; tg.onclick = function () { A.openUrl(TG_URL); };
+    w.appendChild(tg);
+    var b = el('div', 'btns'); var ok = el('button', 'btn', 'Kapat'); ok.onclick = hideModal; b.appendChild(ok); w.appendChild(b);
+    showModal(w);
+  }
+
+  // Durum / gezinme çubuğu boşlukları (başlık çubuğun altında kalmasın)
+  function insets() {
+    var t = 0, b = 0;
+    try { t = A.topInset() || 0; b = A.bottomInset() || 0; } catch (e) {}
+    document.body.style.paddingTop = (t + 22) + 'px';
+    document.body.style.paddingBottom = (b + 40) + 'px';
+  }
+
   // ---------------------------------------------------------------- Android -> JS geri çağrıları
   function onSaveResult(ok, text) {
     saving = false;
@@ -424,6 +509,10 @@ object SettingsHtml {
 
   q('logo').innerHTML = LOGO;
   q('closeBtn').innerHTML = svg('close', 22);
+  q('aboutBtn').innerHTML = svg('info', 22);
+  q('aboutBtn').onclick = about;
+  q('tgBtn').innerHTML = TG + '<span>Telegram kanalımıza katıl</span>';
+  q('tgBtn').onclick = function () { A.openUrl(TG_URL); };
   q('closeBtn').onclick = function () { A.close(); };
   q('addBtn').innerHTML = svg('plus', 22) + '<span>Yeni IPTV listesi ekle</span>';
   q('addBtn').onclick = function () { editor(null); };
@@ -432,6 +521,14 @@ object SettingsHtml {
     q('testAll').disabled = true; A.testAll();
   };
 
+  q('split').onchange = function () {
+    A.setSplit(q('split').checked);
+    modeText();
+    q('modeTag').style.display = 'inline-block';
+    toast('Uygulamak için CloudStream\'i kapatıp yeniden açın');
+  };
+
+  insets();
   load();
   render();
 </script>
