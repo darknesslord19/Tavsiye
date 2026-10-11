@@ -2,7 +2,12 @@
 
 Kendi M3U/IPTV listelerinizi tek yerden yönetin.
 
-* Liste kartları: aktif / pasif anahtarı, düzenle, sil, yenile (test et)
+* **İki sayfa:** altta *Kullanıcı* ve *Yönetici* ikonları
+* **Her liste ayrı kaynak:** kaydettiğiniz her liste CloudStream'de ayrı bir kaynak olarak görünür (ekle/aktif/pasif/sil sonrası CloudStream'i kapatıp açın)
+* **Yönetici listeleri:** `ornek/Cloudstreamtv.json` biçiminde, Firebase'den uzaktan gelir; silinemez, yalnızca aktif/pasif yapılır. Adres: `Store.kt` içindeki `AdminSource.URL`
+* **Tek Aktif/Pasif düğmesi** (kartın sağ üstü)
+
+* Liste kartları: düzenle, sil, yenile (test et)
 * Her listenin kategorileri: göz ikonu ile göster / gizle, arama, "tümünü göster/gizle"
 * Kısaltılmış (bit.ly, tinyurl…) ve yönlendirmeli linkler otomatik çözülür; GitHub `blob`, Gist ve Pastebin linkleri ham adrese çevrilir
 * Link kaydedilmeden önce okunur: çalışmayan / geçersiz link eklenemez
@@ -21,8 +26,3 @@ Kendi M3U/IPTV listelerinizi tek yerden yönetin.
 
 ## Yerel derleme
 JDK 17 + Android SDK kurulu olmalı: `./gradlew make` → `IPTVProvider/build/IPTVProvider.cs3`
-
-## Sürüm notları
-**v2**
-* Derleme düzeltmesi: kök `build.gradle.kts` Kotlin 2.1.0 → **2.3.0** (CloudStream `pre-release` API'si Kotlin 2.4 metadata ile derlendiği için eski Kotlin "incompatible version of Kotlin" hatası verir), `kotlinOptions` → `compilerOptions`.
-* Liste indirirken önce tarayıcı, olmazsa oynatıcı (VLC) kimliği denenir (bazı sunucular yalnızca birini kabul eder).
