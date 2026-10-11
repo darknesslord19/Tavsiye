@@ -11,8 +11,8 @@ buildscript {
     }
     dependencies {
         classpath("com.android.tools.build:gradle:8.7.3")
-        classpath("com.github.recloudstream:gradle:-SNAPSHOT")
-        // CloudStream pre-release Kotlin 2.4 metadata ile derleniyor: eski Kotlin (2.1) "incompatible version of Kotlin" hatası verir.
+        // CloudStream gradle eklentisi (.cs3 derlemesini yapar)
+        classpath("com.github.recloudstream:gradle:master-SNAPSHOT")
         classpath("org.jetbrains.kotlin:kotlin-gradle-plugin:2.3.0")
     }
 }
@@ -37,9 +37,7 @@ subprojects {
     apply(plugin = "com.lagradost.cloudstream3.gradle")
 
     cloudstream {
-        // GitHub Actions içinde otomatik "kullanici/depo" olur.
-        setRepo(System.getenv("GITHUB_REPOSITORY") ?: "kullanici/depo")
-        authors = listOf("Darknes Lord")
+        setRepo(System.getenv("GITHUB_REPOSITORY") ?: "https://github.com/user/repo")
     }
 
     android {
@@ -48,37 +46,36 @@ subprojects {
             compileSdkVersion(35)
             targetSdk = 35
         }
+
         compileOptions {
             sourceCompatibility = JavaVersion.VERSION_1_8
             targetCompatibility = JavaVersion.VERSION_1_8
         }
+
         tasks.withType<KotlinJvmCompile> {
             compilerOptions {
                 jvmTarget.set(JvmTarget.JVM_1_8)
                 freeCompilerArgs.addAll(
                     "-Xno-call-assertions",
                     "-Xno-param-assertions",
-                    "-Xno-receiver-assertions",
-                    "-Xskip-metadata-version-check"
+                    "-Xno-receiver-assertions"
                 )
             }
         }
     }
 
     dependencies {
-        // CloudStream API taslakları: sürüme göre yapılandırma adı "cloudstream" ya da "apk"
-        val stubs = configurations.findByName("cloudstream")?.name
-            ?: configurations.findByName("apk")?.name
-            ?: error("CloudStream gradle eklentisi yapılandırması bulunamadı")
-        add(stubs, "com.lagradost:cloudstream3:pre-release")
+        val cloudstream by configurations
+        val implementation by configurations
 
-        add("implementation", kotlin("stdlib"))
-        // Yalnızca derleme için; çalışma anında bunlar CloudStream uygulamasından gelir.
-        add("implementation", "androidx.appcompat:appcompat:1.7.0")
-        add("implementation", "org.jetbrains.kotlinx:kotlinx-coroutines-android:1.9.0")
+        cloudstream("com.lagradost:cloudstream3:pre-release")
+
+        implementation(kotlin("stdlib"))
+        implementation("com.github.Blatzar:NiceHttp:0.4.13")
+        implementation("org.jsoup:jsoup:1.18.3")
     }
 }
 
-task<Delete>("clean") {
+tasks.register<Delete>("clean") {
     delete(rootProject.layout.buildDirectory)
 }
