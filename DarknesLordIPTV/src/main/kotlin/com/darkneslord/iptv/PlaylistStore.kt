@@ -29,6 +29,13 @@ object Store {
 
     fun all(): List<PlaylistEntry> = items.toList()
 
+    /** Her liste CloudStream'de ayrı kaynak olarak görünsün mü? (Değişiklik uygulama yeniden başlayınca geçerli olur.) */
+    fun splitEnabled(): Boolean = prefs?.getBoolean("split", false) ?: false
+
+    fun setSplit(value: Boolean) {
+        prefs?.edit()?.putBoolean("split", value)?.apply()
+    }
+
     @Synchronized
     fun add(entry: PlaylistEntry) {
         items.add(entry)
