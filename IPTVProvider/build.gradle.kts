@@ -6,7 +6,7 @@ android {
 }
 
 cloudstream {
-    description = "Darknes Lord - kendi M3U/IPTV listelerinizi yönetin: aç/kapat, kategori gizle, kısaltılmış linkleri çöz."
+    description = "Darknes Lord - M3U/IPTV listelerinizi yönetin: her liste ayrı kaynak, aktif/pasif, kategori göz ikonu, yönetici listesi."
     authors = listOf("Darknes Lord")
 
     /**
