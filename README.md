@@ -18,6 +18,8 @@ Derleme tamamlanınca workflow sayfasındaki **Artifacts** bölümünden `Darkne
 
 ## Özellikler
 
+- Gösterim modu anahtarı: **kapalı** → tüm aktif listeler tek "Darknes Lord" ana sayfasında sıralanır; **açık** → her aktif liste CloudStream kaynak seçicide kendi adıyla ayrı kaynak olur. Değişiklik için CloudStream'i kapatıp yeniden açmak gerekir.
+- Başlıkta bilgi (i) düğmesi: uygulama hakkında popup; Telegram butonu (https://t.me/darknes_lord) ve en altta geliştirici satırı.
 - Liste kartları: aktif/pasif anahtarı, yenile (test), düzenle, sil.
 - Her listenin kategorileri: göz ikonuyla göster/gizle, arama, "tümünü göster/gizle".
 - Link kaydedilmeden önce çözülür ve okunur; çalışmayan veya geçersiz link eklenemez.
