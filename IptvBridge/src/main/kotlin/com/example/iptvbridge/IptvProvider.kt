@@ -32,7 +32,10 @@ class IptvProvider(private val list: IptvList) : MainAPI() {
         get() {
             val pairs = ArrayList<Pair<String, String>>()
             pairs.add(ALL to "Tüm kanallar")
-            if (list.url.isNotBlank()) IptvStore.groups(list.url).take(CAT_MAX).forEach { pairs.add("g:$it" to it) }
+            if (list.url.isNotBlank()) {
+                val hid = IptvStore.hidden(list.url)
+                IptvStore.groups(list.url).filter { it !in hid }.take(CAT_MAX).forEach { pairs.add("g:$it" to it) }
+            }
             return mainPageOf(*pairs.toTypedArray())
         }
 
@@ -44,6 +47,7 @@ class IptvProvider(private val list: IptvList) : MainAPI() {
     private fun pack(ch: Channel): String {
         val o = JSONObject().put("n", ch.name).put("u", ch.url).put("g", ch.group)
         ch.logo?.let { o.put("l", it) }
+        if (ch.hls) o.put("s", 1)
         if (ch.headers.isNotEmpty()) o.put("h", JSONObject(ch.headers as Map<*, *>))
         return PREFIX + Base64.encodeToString(o.toString().toByteArray(Charsets.UTF_8), Base64.URL_SAFE or Base64.NO_WRAP or Base64.NO_PADDING)
     }
@@ -54,7 +58,7 @@ class IptvProvider(private val list: IptvList) : MainAPI() {
             val o = JSONObject(String(Base64.decode(raw, Base64.URL_SAFE or Base64.NO_WRAP), Charsets.UTF_8))
             val h = HashMap<String, String>()
             o.optJSONObject("h")?.let { for (k in it.keys()) h[k] = it.optString(k) }
-            Channel(o.optString("n"), o.optString("u"), o.optString("l").ifBlank { null }, o.optString("g"), h)
+            Channel(o.optString("n"), o.optString("u"), o.optString("l").ifBlank { null }, o.optString("g"), h, o.optInt("s", 0) == 1)
         } catch (e: Exception) { null }
     }
 
@@ -70,7 +74,8 @@ class IptvProvider(private val list: IptvList) : MainAPI() {
     // ---------------------------------------------------------------- ana sayfa
     override suspend fun getMainPage(page: Int, request: MainPageRequest): HomePageResponse {
         requireList()
-        val all = Net.channels(list.url)
+        val hid = IptvStore.hidden(list.url)
+        val all = Net.channels(list.url, title = list.name).filter { it.group !in hid }
         val rows = if (request.data == ALL) all else {
             val g = request.data.removePrefix("g:")
             all.filter { it.group == g }
@@ -89,7 +94,8 @@ class IptvProvider(private val list: IptvList) : MainAPI() {
         requireList()
         val q = fold(query.trim())
         if (q.isEmpty()) return emptyList()
-        return Net.channels(list.url).asSequence().filter { fold(it.name).contains(q) || fold(it.group).contains(q) }
+        val hid = IptvStore.hidden(list.url)
+        return Net.channels(list.url, title = list.name).asSequence().filter { it.group !in hid }.filter { fold(it.name).contains(q) || fold(it.group).contains(q) }
             .take(80).toList().map { toSearch(it) }
     }
 
@@ -119,7 +125,7 @@ class IptvProvider(private val list: IptvList) : MainAPI() {
         val ch = unpack(data) ?: return false
         val path = ch.url.lowercase().substringBefore('?')
         val type = when {
-            path.contains("m3u8") -> ExtractorLinkType.M3U8
+            ch.hls || path.contains("m3u8") -> ExtractorLinkType.M3U8
             path.endsWith(".mpd") -> ExtractorLinkType.DASH
             else -> ExtractorLinkType.VIDEO
         }
