@@ -46,6 +46,14 @@ class DarknesSettingsFragment : DialogFragment() {
     private lateinit var statLists: TextView
     private lateinit var statActive: TextView
     private lateinit var statChannels: TextView
+    private lateinit var titleSub: TextView
+    private lateinit var statsRow: LinearLayout
+    private lateinit var addBtn: View
+    private lateinit var syncBtn: View
+    private lateinit var navUser: LinearLayout
+    private lateinit var navAdmin: LinearLayout
+    private var adminPage = false
+    private var restartHint = false
 
     private val expanded = mutableSetOf<String>()
     private val checking = mutableSetOf<String>()
@@ -100,6 +108,7 @@ class DarknesSettingsFragment : DialogFragment() {
         }
         titles.addView(label("Darknes Lord", 22f, Theme.TEXT, bold = true))
         titles.addView(label("IPTV yönetim merkezi", 12f, Theme.MUTED))
+        titleSub = titles.getChildAt(1) as TextView
         header.addView(titles)
         header.addView(IconView(ctx, IconKind.CLOSE, Theme.MUTED).apply {
             layoutParams = LinearLayout.LayoutParams(ctx.dp(44), ctx.dp(44))
@@ -112,6 +121,7 @@ class DarknesSettingsFragment : DialogFragment() {
             orientation = LinearLayout.HORIZONTAL
             setPadding(ctx.dp(14), 0, ctx.dp(14), ctx.dp(6))
         }
+        statsRow = stats
         statLists = statCard(stats, "Liste")
         statActive = statCard(stats, "Aktif")
         statChannels = statCard(stats, "Kanal")
@@ -136,7 +146,30 @@ class DarknesSettingsFragment : DialogFragment() {
         add.addView(label("Yeni IPTV listesi ekle", 15f, Color.WHITE, bold = true).apply {
             layoutParams = LinearLayout.LayoutParams(WRAP, WRAP).apply { marginStart = ctx.dp(6) }
         })
+        addBtn = add
         root.addView(add)
+
+        // ---- Yönetici sayfasında: listeyi uzaktan yenile
+        val sync = LinearLayout(ctx).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER
+            background = roundBg(ctx, withAlpha(Theme.VIOLET, 40), 16, Theme.VIOLET, 1)
+            isClickable = true
+            setPadding(ctx.dp(16), ctx.dp(13), ctx.dp(16), ctx.dp(13))
+            layoutParams = LinearLayout.LayoutParams(MATCH, WRAP).apply {
+                setMargins(ctx.dp(18), ctx.dp(8), ctx.dp(18), ctx.dp(8))
+            }
+            setOnClickListener { syncAdmin() }
+        }
+        sync.addView(IconView(ctx, IconKind.REFRESH, Theme.VIOLET).apply {
+            background = null
+            layoutParams = LinearLayout.LayoutParams(ctx.dp(26), ctx.dp(26))
+        })
+        sync.addView(label("Yönetici listesini yenile", 15f, Theme.VIOLET, bold = true).apply {
+            layoutParams = LinearLayout.LayoutParams(WRAP, WRAP).apply { marginStart = ctx.dp(6) }
+        })
+        syncBtn = sync
+        root.addView(sync)
 
         // ---- Kart listesi
         listBox = LinearLayout(ctx).apply {
@@ -148,7 +181,36 @@ class DarknesSettingsFragment : DialogFragment() {
             addView(listBox)
         }, LinearLayout.LayoutParams(MATCH, 0, 1f))
 
+        // ---- Alt gezinme: Kullanıcı | Yönetici
+        val nav = LinearLayout(ctx).apply {
+            orientation = LinearLayout.HORIZONTAL
+            background = roundBg(ctx, Theme.CARD, 0, Theme.STROKE, 1)
+            setPadding(ctx.dp(8), ctx.dp(6), ctx.dp(8), ctx.dp(6))
+        }
+        fun navItem(kind: IconKind, title: String, admin: Boolean): LinearLayout {
+            val item = LinearLayout(ctx).apply {
+                orientation = LinearLayout.VERTICAL
+                gravity = Gravity.CENTER
+                isClickable = true
+                setPadding(0, ctx.dp(4), 0, ctx.dp(4))
+                layoutParams = LinearLayout.LayoutParams(0, WRAP, 1f)
+                setOnClickListener { adminPage = admin; render() }
+            }
+            item.addView(IconView(ctx, kind, Theme.MUTED).apply {
+                background = null
+                isClickable = false
+                layoutParams = LinearLayout.LayoutParams(ctx.dp(34), ctx.dp(30))
+            })
+            item.addView(label(title, 11f, Theme.MUTED, bold = true).apply { setPadding(0, ctx.dp(2), 0, 0) })
+            nav.addView(item)
+            return item
+        }
+        navUser = navItem(IconKind.USER, "Kullanıcı", false)
+        navAdmin = navItem(IconKind.SHIELD, "Yönetici", true)
+        root.addView(nav)
+
         render()
+        if (Store.admins().isEmpty()) syncAdmin(silent = true)
         return root
     }
 
@@ -200,7 +262,18 @@ class DarknesSettingsFragment : DialogFragment() {
     private fun render() {
         if (context == null) return
         listBox.removeAllViews()
-        val items = Store.all()
+        val items = if (adminPage) Store.admins() else Store.users()
+
+        // sayfa görünümü
+        statsRow.visibility = if (adminPage) View.GONE else View.VISIBLE
+        addBtn.visibility = if (adminPage) View.GONE else View.VISIBLE
+        syncBtn.visibility = if (adminPage) View.VISIBLE else View.GONE
+        titleSub.text = if (adminPage) "Yönetici listeleri" else "IPTV yönetim merkezi"
+        for ((item, on) in listOf(navUser to !adminPage, navAdmin to adminPage)) {
+            val c = if (on) Theme.ACCENT else Theme.MUTED
+            (item.getChildAt(0) as IconView).set((item.getChildAt(0) as IconView).kind, c)
+            (item.getChildAt(1) as TextView).setTextColor(c)
+        }
 
         statLists.text = items.size.toString()
         statActive.text = items.count { it.enabled }.toString()
@@ -221,9 +294,10 @@ class DarknesSettingsFragment : DialogFragment() {
             setPadding(ctx.dp(24), ctx.dp(48), ctx.dp(24), ctx.dp(24))
         }
         box.addView(LogoView(ctx).apply { layoutParams = LinearLayout.LayoutParams(ctx.dp(72), ctx.dp(72)); alpha = 0.55f })
-        box.addView(label("Henüz liste yok", 17f, Theme.TEXT, bold = true).apply { setPadding(0, ctx.dp(18), 0, ctx.dp(6)) })
+        box.addView(label(if (adminPage) "Yönetici listesi boş" else "Henüz liste yok", 17f, Theme.TEXT, bold = true).apply { setPadding(0, ctx.dp(18), 0, ctx.dp(6)) })
         box.addView(label(
-            "M3U linkinizi ekleyin. Kısaltılmış linkler otomatik çözülür, liste okunur ve çalışmayan linkler kaydedilmez.",
+            if (adminPage) "Şu an yayınlanmış bir yönetici listesi yok. Yenile düğmesiyle tekrar deneyin."
+            else "M3U linkinizi ekleyin. Kısaltılmış linkler otomatik çözülür, liste okunur ve çalışmayan linkler kaydedilmez.",
             13f, Theme.MUTED
         ).apply { gravity = Gravity.CENTER })
         return box
@@ -264,17 +338,24 @@ class DarknesSettingsFragment : DialogFragment() {
         info.addView(label(e.name, 16f, Theme.TEXT, bold = true).apply {
             maxLines = 1; ellipsize = TextUtils.TruncateAt.END
         })
-        info.addView(label(e.url, 11f, Theme.MUTED).apply {
-            maxLines = 1; ellipsize = TextUtils.TruncateAt.MIDDLE; setPadding(0, ctx.dp(4), 0, 0)
-        })
+        if (!e.admin) {
+            info.addView(label(e.url, 11f, Theme.MUTED).apply {
+                maxLines = 1; ellipsize = TextUtils.TruncateAt.MIDDLE; setPadding(0, ctx.dp(4), 0, 0)
+            })
+        }
         top.addView(info)
-        top.addView(ToggleView(ctx).apply {
-            setChecked(e.enabled)
+        top.addView(label(if (e.enabled) "Aktif" else "Pasif", 12f, if (e.enabled) Theme.GREEN else Theme.MUTED, bold = true).apply {
+            val col = if (e.enabled) Theme.GREEN else Theme.MUTED
+            gravity = Gravity.CENTER
+            background = roundBg(ctx, withAlpha(col, 36), 14, col, 1)
+            setPadding(ctx.dp(16), ctx.dp(9), ctx.dp(16), ctx.dp(9))
+            isClickable = true
             layoutParams = LinearLayout.LayoutParams(WRAP, WRAP).apply { marginStart = ctx.dp(10) }
-            onChange = { on ->
-                e.enabled = on
+            setOnClickListener {
+                e.enabled = !e.enabled
                 Store.save()
                 render()
+                hintRestart()
             }
         })
         card.addView(top)
@@ -285,6 +366,7 @@ class DarknesSettingsFragment : DialogFragment() {
             setPadding(0, ctx.dp(12), 0, 0)
             alpha = if (e.enabled) 1f else 0.5f
         }
+        if (e.admin) chips.addView(chip("Yönetici", Theme.VIOLET))
         when {
             checking.contains(e.id) -> chips.addView(chip("Kontrol ediliyor…", Theme.AMBER))
             e.status == STATUS_OK -> {
@@ -340,8 +422,10 @@ class DarknesSettingsFragment : DialogFragment() {
             setOnClickListener { onClick() }
         }
         actions.addView(action(IconKind.REFRESH, Theme.AMBER) { testEntry(e) })
-        actions.addView(action(IconKind.EDIT, Theme.BLUE) { showEditor(e) })
-        actions.addView(action(IconKind.TRASH, Theme.RED) { confirmDelete(e) })
+        if (!e.admin) {
+            actions.addView(action(IconKind.EDIT, Theme.BLUE) { showEditor(e) })
+            actions.addView(action(IconKind.TRASH, Theme.RED) { confirmDelete(e) })
+        }
         card.addView(actions)
 
         if (isOpen) card.addView(buildCategories(e))
@@ -460,6 +544,26 @@ class DarknesSettingsFragment : DialogFragment() {
         row.addView(count)
         row.addView(eye)
         return row
+    }
+
+    // ------------------------------------------------------------------ yönetici eşitleme / bilgi
+
+    /** Kaynaklar eklenti açılışında kaydedilir; aktif/pasif/ekle/sil sonrası CloudStream yeniden açılmalıdır. */
+    private fun hintRestart() {
+        if (restartHint) return
+        restartHint = true
+        toast("Kaynak listesi için CloudStream'i kapatıp yeniden açın")
+    }
+
+    private fun syncAdmin(silent: Boolean = false) {
+        if (!silent) toast("Yönetici listesi alınıyor…")
+        scope.launch {
+            val ok = withContext(Dispatchers.IO) { Store.syncAdmin() }
+            if (!isAdded) return@launch
+            render()
+            if (!silent) toast(if (ok) "Yönetici listesi güncellendi" else "Yönetici listesine ulaşılamadı")
+            else if (ok && Store.admins().isNotEmpty()) hintRestart()
+        }
     }
 
     // ------------------------------------------------------------------ test / yenile
@@ -589,6 +693,7 @@ class DarknesSettingsFragment : DialogFragment() {
                 Repo.apply(entry, r)
                 if (existing == null) Store.add(entry) else Store.save()
                 expanded.add(entry.id)
+                if (existing == null) hintRestart()
                 dlg.dismiss()
                 render()
                 toast("${fmt(r.channels.size)} kanal bulundu")
@@ -616,6 +721,7 @@ class DarknesSettingsFragment : DialogFragment() {
         row.addView(pillButton("Sil", Theme.RED, true) {
             expanded.remove(e.id)
             Store.remove(e)
+            hintRestart()
             dlg.dismiss()
             render()
         }, LinearLayout.LayoutParams(0, WRAP, 1f))
