@@ -8,6 +8,8 @@ data class Channel(
     val logo: String?,
     val group: String,
     val headers: Map<String, String>,
+    /** Liste değil, tek bir HLS akışı (.m3u8 medya/ana oynatma listesi). */
+    val hls: Boolean = false,
 ) {
     /** .mp4/.mkv gibi dosyalar canlı yayın değil, film olarak gösterilir. */
     val isVod: Boolean
@@ -18,6 +20,9 @@ data class Channel(
 object M3u {
     private val ATTR = Regex("""([A-Za-z0-9_-]+)="([^"]*)"""")
     const val DEFAULT_GROUP = "Diğer"
+
+    /** .m3u8 akış dosyası mı (kanal listesi değil)? Parçalar (.ts) kanal sanılmasın diye ayrı ele alınır. */
+    fun isHls(text: String): Boolean = text.contains("#EXT-X-STREAM-INF") || text.contains("#EXT-X-TARGETDURATION")
 
     fun looksLikeM3u(text: String): Boolean {
         val t = text.trimStart('﻿', ' ', '\n', '\r', '\t')
@@ -89,6 +94,10 @@ object M3u {
         "cookie" -> "Cookie"
         else -> k
     }
+
+    /** Tüm gruplar ve kanal sayıları (kalabalıktan aza). */
+    fun groupCounts(list: List<Channel>, max: Int = 500): List<Pair<String, Int>> =
+        list.groupingBy { it.group }.eachCount().entries.sortedByDescending { it.value }.take(max).map { it.key to it.value }
 
     /** Ana sayfa satırları için: en kalabalık gruplar (en çok [max] tane). */
     fun topGroups(list: List<Channel>, max: Int = 15): List<String> =
