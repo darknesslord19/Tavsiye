@@ -33,7 +33,7 @@ class IptvBridgePlugin : Plugin() {
             }
             // Ana sayfa grup satırları için henüz grubu bilinmeyen listeleri arka planda hazırla
             Thread {
-                for (l in lists) if (IptvStore.groups(l.url).isEmpty()) runCatching { blocking { Net.channels(l.url) } }
+                for (l in lists) if (IptvStore.groups(l.url).isEmpty()) runCatching { blocking { Net.channels(l.url, title = l.name) } }
             }.start()
         }
 
