@@ -1,2 +1,2 @@
-rootProject.name = "DarknesLordIPTV"
-include("DarknesLordIPTV")
+rootProject.name = "Fullhdfilmizlesene"
+include("Fullhdfilmizlesene")
