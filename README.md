@@ -1,43 +1,49 @@
-# Darknes Lord IPTV CS3
+# Fullhdfilmizlesene CS3
 
-Kendi M3U/IPTV listelerinizi CloudStream içinde yöneten eklenti projesi.
+CloudStream icin CS3 Cikarici uygulamasi ile otomatik uretilen eklenti projesi.
 
 ## GitHub Actions
 
-Bu repo GitHub'a yüklendiğinde `main` veya `master` branch'e yapılan push ile otomatik derlenir.
-Ayrıca Actions > Build CloudStream CS3 > Run workflow ile elle başlatılabilir.
+Bu repo GitHub'a yuklendiginde `main` veya `master` branch'e yapilan push ile otomatik derlenir.
+Ayrica Actions > Build CloudStream CS3 > Run workflow ile elle baslatilabilir.
 
-Derleme tamamlanınca workflow sayfasındaki **Artifacts** bölümünden `DarknesLordIPTV-CS3` paketini indirebilirsin.
-İçinde `DarknesLordIPTV.cs3` dosyası bulunur.
+Derleme tamamlaninca workflow sayfasindaki **Artifacts** bolumunden `Fullhdfilmizlesene-CS3` paketini indirebilirsin.
+Icinde eklenti icin bir `.cs3` dosyasi bulunur.
 
-## Kullanım
+## Moduller
 
-1. `.cs3` dosyasını CloudStream'e yükle.
-2. Ayarlar > Eklentiler > Darknes Lord yanındaki dişli simgesine bas.
-3. **Yeni IPTV listesi ekle** ile M3U linkini yapıştır (kısaltılmış link olabilir).
+- `Fullhdfilmizlesene` (com.fullhdfilmizlesene)
 
-## Özellikler
+## Analiz Ozeti
 
-- Gösterim modu anahtarı: **kapalı** → tüm aktif listeler tek "Darknes Lord" ana sayfasında sıralanır; **açık** → her aktif liste CloudStream kaynak seçicide kendi adıyla ayrı kaynak olur. Değişiklik için CloudStream'i kapatıp yeniden açmak gerekir.
-- Başlıkta bilgi (i) düğmesi: uygulama hakkında popup; Telegram butonu (https://t.me/darknes_lord) ve en altta geliştirici satırı.
-- Liste kartları: aktif/pasif anahtarı, yenile (test), düzenle, sil.
-- Her listenin kategorileri: göz ikonuyla göster/gizle, arama, "tümünü göster/gizle".
-- Link kaydedilmeden önce çözülür ve okunur; çalışmayan veya geçersiz link eklenemez.
-- Kısaltılmış (bit.ly, tinyurl…) ve yönlendirmeli linkler otomatik çözülür; HTML ara sayfadaki M3U linki bulunur.
-  GitHub `blob`, Gist ve Pastebin linkleri ham adrese çevrilir.
-- Sonradan çalışmaz hale gelen liste kırmızı görünür ve ana sayfada gösterilmez.
-- Oynatmadan önce yayın linki çözülür; kesin ölü (404/410, sunucu yok) kanallar açılmaz.
-- "Tüm listeleri test et" düğmesi her listenin durumunu raporlar. Sürüm etiketi `Diagnostics.kt` içindeki `BUILD`.
+```
+SİTE: fullhdfilmizlesene.now
 
-## Notlar
+✔ Kategori/menü linkleri: 68
+✔ Film kartı seçici: div.fut-box (10 adet)
+✘ Arama: form bulunamadı (varsayılan ?s= kullanıldı)
+✔ Detay sayfası: başlık=h1.blok-baslik açıklama=meta
+✘ Dizi bölümleri: yok (film olarak ayarlandı)
+✔ Oynatıcı: 3 medya, 1 iframe, 0 altyazı
+     iframe: rapidvid.org
+     medya : https://s23.imgz.me/m9/I2SeMF5IpP5RMJSxYx1uov5OYxghnKMypl5CqKDhGKymqTIlrF4lZQV1YyqSDv1RGP4kZQtjpP5RI…
+     medya : https://s23.imgz.me/m4/I2SeMF5IpP5RMJSxYx1uov5OYxghnKMypl5CqKDhGKymqTIlrF4lZQV1YyqSDv1RGP4kZQtjpP5RI…
+     medya : https://s23.imgz.me/m1/I2SeMF5IpP5RMJSxYx1uov5OYxghnKMypl5CqKDhGKymqTIlrF4lZQV1YyqSDv1RGP4kZQtjpP5RI…
 
-- Ayarlar ekranı XML/androidx kullanmaz: `SettingsDialog.kt` (Dialog + WebView) ve `SettingsHtml.kt` (gömülü HTML).
-- Ağ katmanı (`Net.kt`) yalnızca `java.net` kullanır; yönlendirmeleri elle takip eder.
-- Reklam/captcha gerektiren veya JavaScript ile yönlendiren kısaltıcılar çözülemez.
-- Kanallar tek tek önceden taranmaz; ölü kanal oynatma anında elenir.
-- ClearKey DRM desteği yoktur.
-- Link çözümleme/M3U ayrıştırma kodu JVM'de test edildi; CloudStream'e bağlanan kısım gerçek cihazda denenmedi.
+GİZLEME / ŞİFRELEME
+· p.a.c.k.e.r yok
+· Base64 katmanı yok
+· AES/CryptoJS yok
+! Cloudflare doğrulaması var (CloudflareKiller eklendi)
 
-## Modüller
+API/ajax uçları: 3
+     https://www.google-analytics.com/g/collect?v=2&tid=G-ZRR1WHXHVX&gtm=45je6af0h2v9227274004za208zd9227274004xf1&…
+     [GET] https://cdn.imgz.me/player/ifr/vod/jw-8.38.10/translations/tr.json
+     https://www.google-analytics.com/g/collect?v=2&tid=G-ZRR1WHXHVX&gtm=45je6af0h2v9227274004za208zd9227274004xf1&…
 
-- `DarknesLordIPTV` (com.darkneslord.iptv)
+══════ YAPILACAKLAR ══════
+Hiç eksik yok. KOD sekmesindeki dosyayı veya PAKET (.zip) çıktısını kullanabilirsin.
+
+Sonraki adım: 📦 PAKET (.zip) → içindekileri GitHub deposuna yükle → Actions sekmesi Fullhdfilmizlesene-CS3 (.cs3) dosyasını üretir.
+
+```
