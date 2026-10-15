@@ -1,9 +1,9 @@
 // Otomatik üretildi - fullhdfilmizlesene.now
 // Seçiciler sayfadan çıkarıldı; hedef sitede bir kez doğrulayın.
 // oynatıcı iframe: rapidvid.org
-// medya: https://s34.imgz.me/m4/DJ5coJSfpl4lZQV2YyqSDv1RGP4kZQtjpP5RIHSZYxthZwL0YHuRGD/eng-3.vtt
-// medya: https://s34.imgz.me/m9/DJ5coJSfpl4lZQV2YyqSDv1RGP4kZQtjpP5RIHSZYxthZwL0YHuRGD/tur-2-default.vtt
-// medya: https://s34.imgz.me/m5/DJ5coJSfpl4lZQV2YyqSDv1RGP4kZQtjpP5RIHSZYxthZwL0YHuRGD/tur-1.vtt
+// medya: https://s23.imgz.me/m9/I2SeMF5IpP5RMJSxYx1uov5OYxghnKMypl5CqKDhGKymqTIlrF4lZQV1YyqSDv1RGP4kZQtjpP5RIHSZYxthZwL0YHuRGD/tur-2-default.vtt
+// medya: https://s23.imgz.me/m4/I2SeMF5IpP5RMJSxYx1uov5OYxghnKMypl5CqKDhGKymqTIlrF4lZQV1YyqSDv1RGP4kZQtjpP5RIHSZYxthZwL0YHuRGD/eng-3.vtt
+// medya: https://s23.imgz.me/m1/I2SeMF5IpP5RMJSxYx1uov5OYxghnKMypl5CqKDhGKymqTIlrF4lZQV1YyqSDv1RGP4kZQtjpP5RIHSZYxthZwL0YHuRGD/tur-1.vtt
 // not: Sunucu: Cloudflare arkasında
 
 package com.fullhdfilmizlesene
